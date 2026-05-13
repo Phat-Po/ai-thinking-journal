@@ -36,3 +36,9 @@
 | 2026-05-14 | Noise audit applied: filtered Codex AGENTS bootstrap messages, moved developer skills/plugins to stats only, dropped Codex reasoning summaries, dropped slash-command markup, stripped system-reminder tags, merged same-minute assistant messages |
 | 2026-05-14 | Verified 2026-05-10 filtered output after noise fixes: AGENTS=0, skill lines=0, Reasoning summary=0, local-command-caveat=0, size=169,907 bytes, lines=4,328 |
 | 2026-05-14 | Wrap-up updated in HANDOFF.md. Current repo is clean at `f6e94b4`; next step is to diagnose the operator's remaining issues before starting Task 03 automation/weekly/monthly work |
+| 2026-05-14 | Bug fix: session separators changed from `##` to `<!-- SESSION: -->` to avoid heading conflicts |
+| 2026-05-14 | Bug fix: added dedup logic for repeated skill/template content (>500 chars hash + frontmatter pattern) |
+| 2026-05-14 | Architecture: added `02_session_summarize.py` (per-session 3-5 bullet LLM summaries), renamed old 02→03 |
+| 2026-05-14 | Added OpenAI backend support (--backend openai\|ollama), default openai with gpt-4.1-mini |
+| 2026-05-14 | Full pipeline verified: 15 sessions → session_summaries.md (4KB) → daily journal. Cost ~$0.04/day |
+| 2026-05-14 | Repo clean at `7e1c82a`. Next: Task 04 — daily orchestration, launchd, weekly/monthly rollups |
