@@ -2,7 +2,13 @@
 
 **Goal**: Nightly launchd job that runs extraction + summarization and writes to Obsidian vault.
 
-**Status**: Blocked by Task 01, 02
+**Status**: Blocked by Task 02
+
+## Pipeline Scripts (already created)
+
+- `scripts/01_extract.py` — extracts today's conversations (DONE)
+- `scripts/02_summarize.py` — summarizes extracted text (NEXT)
+- `scripts/03_daily_pipeline.py` — orchestrates extract → summarize → output (Task 03)
 
 ## Output Template
 
@@ -10,7 +16,7 @@
 ---
 date: YYYY-MM-DD
 tags: [daily-thinking, ai-journal]
-source: [claude-code, codex]
+source: claude-code
 sessions: N
 total_tokens: N
 ---
@@ -20,7 +26,7 @@ total_tokens: N
 
 - Label: `com.pohanlee.daily-thinking-summary`
 - Run at: 23:30 daily
-- Script: `~/.claude/scripts/daily-thinking-summary.py`
+- Script: `scripts/03_daily_pipeline.py`
 - Log: `~/Library/Logs/daily-thinking-summary.log`
 
 ## Obsidian Output Path
