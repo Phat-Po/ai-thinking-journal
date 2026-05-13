@@ -13,11 +13,12 @@ import argparse
 import json
 import re
 import sys
+import hashlib
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 TZ_LOCAL = timezone(timedelta(hours=8))
 
@@ -473,12 +474,43 @@ def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
     return stats
 
 
+SKILL_FRONTMATTER_RE = re.compile(
+    r"^---\s*\nname:\s*.+\ndescription:\s*.+\nmetadata:\s*\n\s+type:\s*",
+    re.MULTILINE,
+)
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.md5(text[:500].encode("utf-8")).hexdigest()
+
+
+def _looks_like_skill_content(text: str) -> bool:
+    return bool(SKILL_FRONTMATTER_RE.search(text))
+
+
+def dedup_message_text(text: str, seen: Set[str]) -> str:
+    if len(text) < 500:
+        return text
+    if _looks_like_skill_content(text):
+        return "[引用了 skill 文件内容]"
+    h = _text_hash(text)
+    if h in seen:
+        return "[重复内容已省略 — 见上方 session]"
+    seen.add(h)
+    return text
+
+
 def build_markdown(date_str: str, sessions: List[SessionData]) -> str:
     lines = ["# Filtered Conversations - %s" % date_str, ""]
+    seen_texts = set()  # type: Set[str]
     for session in sort_sessions(sessions):
         if not session.messages:
             continue
-        lines.append("## %s - %s" % (session.source, session.project_name))
+        first_ts = local_time(session.messages[0].timestamp)
+        last_ts = local_time(session.messages[-1].timestamp)
+        lines.append("<!-- SESSION: %s - %s (%s-%s) -->" % (
+            session.source, session.project_name, first_ts, last_ts,
+        ))
         lines.append("")
         lines.append("- session_id: `%s`" % session.session_id)
         lines.append("- cwd: `%s`" % (session.cwd or "unknown"))
@@ -486,9 +518,10 @@ def build_markdown(date_str: str, sessions: List[SessionData]) -> str:
             lines.append("- git_branch: `%s`" % session.git_branch)
         lines.append("")
         for message in session.messages:
-            lines.append("### %s - %s" % (local_time(message.timestamp), message.role))
+            lines.append("<!-- MSG: %s - %s -->" % (local_time(message.timestamp), message.role))
             lines.append("")
-            lines.append(message.text)
+            text = dedup_message_text(message.text, seen_texts)
+            lines.append(text)
             lines.append("")
         lines.append("---")
         lines.append("")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Task 02: Daily thinking journal summarization.
+Task 03: Daily thinking journal summarization.
 
-Consumes output/YYYY-MM-DD/filtered_conversations.md + stats.json and writes
+Consumes output/YYYY-MM-DD/session_summaries.md + stats.json and writes
 ai-journal/daily/YYYY-MM-DD.md.
 """
 
@@ -106,18 +106,18 @@ def build_frontmatter(date_str: str, stats: Dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_prompt(conversations: str, stats: Dict[str, Any]) -> str:
+def build_prompt(summaries: str, stats: Dict[str, Any]) -> str:
     return """You are a thinking journal analyst for a solo entrepreneur who builds
 e-commerce businesses and AI automation tools.
 
 Given:
-1. Raw conversation transcripts from today (between <conversations> tags)
+1. Per-session summaries from today (between <summaries> tags)
 2. Tool usage statistics (between <stats> tags)
 
 Produce a daily thinking journal entry.
 
 <rules>
-- Write in the SAME LANGUAGE as the dominant language in transcripts
+- Write in the SAME LANGUAGE as the dominant language in the summaries
 - Each bullet: one sentence max, concrete and specific
 - Extract REAL decisions and todos - never invent
 - If a section has nothing: write "無"
@@ -127,8 +127,8 @@ Produce a daily thinking journal entry.
   NOT just list what tools were called
 - `available_skills` and `available_plugins` are environment inventory only.
   They do NOT mean those skills/plugins were used today.
-- The "原始對話索引" section should be a concise index, not a transcript.
-  For each session: 2-4 bullet points summarizing what happened, nothing more.
+- The "原始對話索引" section: re-organize session summaries by project,
+  merge sessions that belong to the same project, keep 2-4 bullets each.
 </rules>
 
 <sections>
@@ -144,10 +144,10 @@ Produce a daily thinking journal entry.
 %s
 </stats>
 
-<conversations>
+<summaries>
 %s
-</conversations>
-""" % (json.dumps(stats, ensure_ascii=False, indent=2), conversations)
+</summaries>
+""" % (json.dumps(stats, ensure_ascii=False, indent=2), summaries)
 
 
 def call_ollama(prompt: str, model: str) -> str:
@@ -174,16 +174,16 @@ def main() -> None:
     date_str = target_date(args.date)
 
     extraction_dir = Path(args.output_dir) / date_str
-    conversations_path = extraction_dir / "filtered_conversations.md"
+    summaries_path = extraction_dir / "session_summaries.md"
     stats_path = extraction_dir / "stats.json"
-    if not conversations_path.exists() or not stats_path.exists():
-        print("Error: extraction artifacts not found for %s" % date_str, file=sys.stderr)
-        print("Run scripts/01_extract.py --date %s first." % date_str, file=sys.stderr)
+    if not summaries_path.exists() or not stats_path.exists():
+        print("Error: artifacts not found for %s" % date_str, file=sys.stderr)
+        print("Run 01_extract.py then 02_session_summarize.py --date %s first." % date_str, file=sys.stderr)
         sys.exit(1)
 
-    conversations = conversations_path.read_text(encoding="utf-8")
+    summaries = summaries_path.read_text(encoding="utf-8")
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
-    prompt = build_prompt(conversations, stats)
+    prompt = build_prompt(summaries, stats)
 
     if args.dry_run:
         print(prompt)

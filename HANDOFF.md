@@ -2,66 +2,53 @@
 
 ## Current Status
 
-Task 01 (Extraction) - daily pipeline working for Claude Code + Codex
-Task 02 (Daily Summarization) - working with product-spec prompt
-Task 03 (Automation / Weekly / Monthly) - not started after scope change
+Task 01 (Extraction) - working, output format updated to HTML comment separators + dedup
+Task 02 (Session Summarization) - new step, per-session LLM summaries, dry-run verified
+Task 03 (Daily Summarization) - updated to consume session_summaries.md instead of raw conversations
+Task 04 (Automation / Weekly / Monthly) - not started
 
-Latest commit:
+## Pipeline Flow
 
-- `f6e94b4 reduce filtered conversation noise`
-
-Working tree status at handoff: clean.
-
-## What Changed
-
-1. `scripts/01_extract.py` now reads Claude Code JSONL and Codex JSONL.
-2. Extraction writes `output/YYYY-MM-DD/filtered_conversations.md` and `output/YYYY-MM-DD/stats.json`.
-3. `scripts/02_summarize.py` reads those two files and writes `ai-journal/daily/YYYY-MM-DD.md`.
-4. The default model is `qwen3-coder:480b-cloud` via local Ollama.
-5. Codex `available_skills` and `available_plugins` are stored in `stats.json` only; they are environment inventory, not actual usage.
-
-## Noise Fixes Already Applied
-
-The main conversation markdown now filters:
-
-- Codex bootstrap messages containing AGENTS instructions
-- Codex developer messages
-- Codex reasoning summaries
-- Claude/Codex slash-command markup such as `<local-command-caveat>`
-- `<system-reminder>...</system-reminder>` tag blocks
-- Consecutive assistant messages in the same session and same local minute are merged
-
-Validation on `2026-05-10`:
-
-```text
-AGENTS.md instructions: 0
-^- skill:: 0
-Reasoning summary:: 0
-local-command-caveat: 0
-<system-reminder: 0
-size: 169,907 bytes
-lines: 4,328
+```
+01_extract.py → filtered_conversations.md + stats.json
+02_session_summarize.py → session_summaries.md (3-5 bullets per session via Ollama)
+03_summarize.py → ai-journal/daily/YYYY-MM-DD.md (daily digest from session summaries)
 ```
 
-Before noise fixes this file was 286,247 bytes and 7,131 lines.
+## What Changed (this session)
+
+### Bug 1: Heading conflict fix
+- Session separators changed from `## source - project` to `<!-- SESSION: source - project (HH:MM-HH:MM) -->`
+- Message headers changed from `### HH:MM - role` to `<!-- MSG: HH:MM - role -->`
+- Content markdown headings no longer conflict with structural markers
+
+### Bug 2: Dedup skill/template content
+- Messages >500 chars with identical first-500-char hash are replaced with `[重复内容已省略 — 见上方 session]`
+- Messages matching skill frontmatter pattern (`---\nname:\ndescription:\nmetadata:`) replaced with `[引用了 skill 文件内容]`
+
+### Architecture: Per-session pre-summarization
+- New `scripts/02_session_summarize.py` splits filtered_conversations.md by `<!-- SESSION: -->` markers
+- Each session gets a 3-5 bullet LLM summary via Ollama
+- `scripts/02_summarize.py` renamed to `scripts/03_summarize.py`
+- `03_summarize.py` now reads `session_summaries.md` (~2-3KB) instead of raw conversations (~170KB)
+- Daily summary prompt updated for session-summary input
 
 ## Verified Commands
 
 ```bash
-python3 -m py_compile scripts/01_extract.py scripts/02_summarize.py
-python3 scripts/01_extract.py --date 2026-05-10
+python3 -m py_compile scripts/01_extract.py scripts/02_session_summarize.py scripts/03_summarize.py
 python3 scripts/01_extract.py --date 2026-05-14
-python3 scripts/02_summarize.py --date 2026-05-14
-python3 scripts/02_summarize.py --date 2026-05-14 --dry-run
+python3 scripts/02_session_summarize.py --date 2026-05-14 --dry-run
+python3 scripts/03_summarize.py --date 2026-05-14 --dry-run
 ```
 
 ## Known Caveats
 
-- Host `python3` is 3.8.1, below the project baseline of Python 3.10, so current code is intentionally Python 3.8-compatible.
+- Host `python3` is 3.8.1; all code is Python 3.8-compatible.
 - Generated `output/` artifacts are ignored by git.
-- `ai-journal/daily/2026-05-14.md` is tracked as the current verified sample output.
-- The operator says there are still issues to modify next; do not assume Task 03 should start before diagnosing those issues.
+- `02_session_summarize.py` requires Ollama running locally for non-dry-run execution.
+- The default model is `qwen3-coder:480b-cloud` for both session and daily summarization.
 
 ## Next Step
 
-Ask the operator for the remaining problem details, inspect the generated markdown/stat output, then decide whether the fix belongs in extraction, stats metadata, or the summary prompt.
+Run the full pipeline end-to-end (without --dry-run) once Ollama is available to validate session summary quality and daily digest output.
