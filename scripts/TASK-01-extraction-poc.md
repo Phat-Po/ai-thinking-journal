@@ -1,49 +1,48 @@
-# Task 01: Extraction POC
+# Task 01: Extraction
 
-**Goal**: Python script that scans today's Claude Code conversation files and extracts all user+assistant text into a readable markdown file.
+**Goal**: Extract one local day of Claude Code + Codex CLI conversations into structured intermediate files for the journal pipeline.
 
-**Status**: Pending
+**Status**: Complete for daily pipeline
 
-## Input
+## Inputs
 
-- `~/.claude/projects/*/<uuid>.jsonl` — filter by file mtime = today
-- Each line is a JSON object with `type` field
+- Claude Code: `~/.claude/projects/**/*.jsonl`
+- Codex CLI: `~/.codex/sessions/YYYY/MM/DD/*.jsonl`
+- Codex archived sessions: `~/.codex/archived_sessions/*.jsonl`
+
+## Output
+
+For each date:
+
+```text
+output/YYYY-MM-DD/
+  filtered_conversations.md
+  stats.json
+```
+
+`output/` is ignored by git.
 
 ## Extraction Logic
 
-1. Glob all `~/.claude/projects/*/<uuid>.jsonl` files
-2. Filter by `mtime >= start-of-today`
-3. For each file, read line by line:
-   - If `type == "user"` → extract `message.content` (string)
-   - If `type == "assistant"` → extract `message.content[*].text` where `type == "text"`
-   - Skip: `type == "attachment"`, `type == "system"`, `type == "file-history-snapshot"`, `type == "last-prompt"`, `type == "permission-mode"`
-4. Output: Markdown with session headers and timestamped messages
+- User messages: keep full text.
+- Assistant messages: keep first paragraph + last paragraph.
+- Claude Code tools: count `tool_use.name`.
+- Codex tools: count `function_call.name`.
+- Codex reasoning summaries: include `reasoning.summary` as assistant summary material.
+- Codex developer messages: reduce to skills/plugins names only.
+- Drop `tool_result`, `function_call_output`, tool inputs, and pure noise messages.
 
-## Output Format (Draft)
+## Usage
 
-```markdown
-# Daily Thinking Log — 2026-05-14
-
-## Session: friend-circle-hackathon
-**Started**: 2026-05-13T17:22:20Z | **Project**: 20260501__docs__friend-circle-hackathon
-
-### 17:22 — User
-[message text]
-
-### 17:23 — Claude
-[response text]
-
----
-
-## Session: amazon-store-health-dashboard
-...
+```bash
+python3 scripts/01_extract.py
+python3 scripts/01_extract.py --date 2026-05-14
 ```
 
 ## Acceptance Criteria
 
-- [ ] Script runs without errors on today's data
-- [ ] Output is valid markdown
-- [ ] Both user and assistant messages are captured
-- [ ] Timestamps are human-readable (HH:MM format)
-- [ ] Project name is decoded from directory path (replace `-` with `/`, etc.)
-- [ ] Tool call details and thinking blocks are excluded (text only)
+- [x] Script runs without errors.
+- [x] Claude Code and Codex sessions are both parsed.
+- [x] Text and tool statistics are separated.
+- [x] Output includes `filtered_conversations.md` and `stats.json`.
+- [x] Project names come from `cwd` final path segment.

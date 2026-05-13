@@ -26,3 +26,10 @@
 | 2026-05-14 | Data granularity audit done: Claude Code captures 3/15+ fields, Codex captures 0 |
 | 2026-05-14 | Product spec created: ai-thinking-journal-product-spec.md |
 | 2026-05-14 | Next: review product spec, may affect Task 02 (prompt) and Task 03 (automation) |
+| 2026-05-14 | Product spec reviewed. Task 02/03 scope changed: daily now requires filtered_conversations.md + stats.json -> ai-journal/daily/YYYY-MM-DD.md; Task 03 expands to daily orchestration + weekly/monthly rollups |
+| 2026-05-14 | Snapshot commit created before implementation: 692de3b |
+| 2026-05-14 | Updated `scripts/01_extract.py`: Claude Code + Codex extraction, tool stats, project stats, session metadata, Codex reasoning summaries, developer skills/plugins reduction |
+| 2026-05-14 | Updated `scripts/02_summarize.py`: product-spec prompt, Ollama qwen3-coder default, YAML frontmatter from stats.json, output to `ai-journal/daily/` |
+| 2026-05-14 | Verified extraction for 2026-05-10: Claude Code 18 sessions, Codex 9 sessions |
+| 2026-05-14 | Verified extraction for 2026-05-14: Claude Code 12 sessions, Codex 6 sessions |
+| 2026-05-14 | Verified summarization for 2026-05-14: generated `ai-journal/daily/2026-05-14.md` |

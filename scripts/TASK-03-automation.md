@@ -1,46 +1,38 @@
-# Task 03: Automation & Output
+# Task 03: Automation, Weekly, Monthly
 
-**Goal**: Nightly launchd job that runs extraction + summarization and writes to Obsidian vault.
+**Goal**: Automate the daily journal and add weekly/monthly rollups.
 
-**Status**: Blocked by Task 02
+**Status**: Not started after product-spec scope change
 
-## Pipeline Scripts (already created)
+## Current Baseline
 
-- `scripts/01_extract.py` — extracts today's conversations (DONE)
-- `scripts/02_summarize.py` — summarizes extracted text (NEXT)
-- `scripts/03_daily_pipeline.py` — orchestrates extract → summarize → output (Task 03)
+- `scripts/01_extract.py` now produces daily intermediate files.
+- `scripts/02_summarize.py` now produces daily Obsidian markdown.
+- Daily end-to-end flow has been verified manually.
 
-## Output Template
+## Required Scope
 
-```yaml
----
-date: YYYY-MM-DD
-tags: [daily-thinking, ai-journal]
-source: claude-code
-sessions: N
-total_tokens: N
----
-```
+Task 03 is no longer only a launchd wrapper. Per `ai-thinking-journal-product-spec.md`, it now includes:
 
-## LaunchAgent Plist
+- Daily orchestration script: extract -> summarize -> `ai-journal/daily/YYYY-MM-DD.md`
+- macOS scheduling via launchd or cron
+- Weekly rollup: read seven daily markdown files and write `ai-journal/weekly/YYYY-WNN.md`
+- Monthly rollup: read weekly markdown plus daily YAML metadata and write `ai-journal/monthly/YYYY-MM.md`
+- Optional git sync must remain gated by explicit push approval
 
-- Label: `com.pohanlee.daily-thinking-summary`
-- Run at: 23:30 daily
-- Script: `scripts/03_daily_pipeline.py`
-- Log: `~/Library/Logs/daily-thinking-summary.log`
+## Proposed Files
 
-## Obsidian Output Path
-
-Configurable via `.env`:
-```
-OBSIDIAN_VAULT_PATH=/path/to/vault
-OUTPUT_FOLDER=daily-thinking
-FILENAME_FORMAT={date}-daily-thinking.md
+```text
+scripts/03_daily_pipeline.py
+scripts/04_weekly.py
+scripts/05_monthly.py
+launchd/com.pohanlee.ai-thinking-journal.plist
 ```
 
 ## Acceptance Criteria
 
-- [ ] launchd job fires at 23:30
-- [ ] Output appears in Obsidian vault
-- [ ] Idempotent — running twice doesn't duplicate
-- [ ] Logs success/failure to log file
+- [ ] Daily pipeline is idempotent.
+- [ ] launchd or cron writes logs for success/failure.
+- [ ] Weekly rollup reads existing daily files and writes weekly markdown.
+- [ ] Monthly rollup reads weekly files plus daily YAML metadata.
+- [ ] No git push or deployment happens without explicit approval.

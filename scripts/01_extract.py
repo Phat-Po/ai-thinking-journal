@@ -1,259 +1,460 @@
 #!/usr/bin/env python3
 """
-Task 01: Extraction POC (v3)
-Scans today's Claude Code conversation files and extracts key messages
-into a readable markdown file.
+Task 01: Daily conversation extraction.
 
-Mode: --mode smart (default) — all user msgs + last paragraph of each assistant msg.
-      --mode full — all messages.
-      --mode key — first user + last assistant only.
+Extracts one local day of Claude Code and Codex CLI conversations into:
+- output/YYYY-MM-DD/filtered_conversations.md
+- output/YYYY-MM-DD/stats.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-TZ_BEIJING = timezone(timedelta(hours=8))
+TZ_LOCAL = timezone(timedelta(hours=8))
 
 
-class Message(NamedTuple):
-    timestamp: str  # ISO 8601 in UTC
-    role: str  # "User" or "Claude"
+@dataclass
+class ExtractedMessage:
+    source: str
+    role: str
+    timestamp: str
+    session_id: str
+    cwd: str
+    git_branch: str
     text: str
 
 
-class SessionResult(NamedTuple):
-    project_name: str
-    messages: List[Message]
+@dataclass
+class SessionData:
+    source: str
+    session_id: str
+    cwd: str = ""
+    git_branch: str = ""
+    messages: List[ExtractedMessage] = field(default_factory=list)
+    tools: Counter = field(default_factory=Counter)
+
+    @property
+    def project_name(self) -> str:
+        return derive_project_name(self.cwd)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Extract daily Claude Code + Codex conversations")
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Local date to extract (YYYY-MM-DD). Default: today in UTC+8.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=str(Path(__file__).parent.parent / "output"),
+        help="Directory for extraction artifacts.",
+    )
+    return parser.parse_args()
+
+
+def target_date(args_date: Optional[str]) -> str:
+    if args_date:
+        datetime.strptime(args_date, "%Y-%m-%d")
+        return args_date
+    return datetime.now(TZ_LOCAL).strftime("%Y-%m-%d")
+
+
+def day_bounds(date_str: str) -> Tuple[datetime, datetime]:
+    start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=TZ_LOCAL)
+    return start, start + timedelta(days=1)
+
+
+def parse_timestamp(ts: str) -> Optional[datetime]:
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def is_in_day(ts: str, start: datetime, end: datetime) -> bool:
+    parsed = parse_timestamp(ts)
+    if not parsed:
+        return False
+    local = parsed.astimezone(TZ_LOCAL)
+    return start <= local < end
+
+
+def local_time(ts: str) -> str:
+    parsed = parse_timestamp(ts)
+    if not parsed:
+        return "??:??"
+    return parsed.astimezone(TZ_LOCAL).strftime("%H:%M")
 
 
 def derive_project_name(cwd: str) -> str:
     if not cwd:
         return "unknown"
-    return Path(cwd).name
+    return Path(cwd).name or "unknown"
 
 
-def extract_text_from_content(content) -> str:
+def extract_text_and_tools(content: Any) -> Tuple[str, List[str]]:
     if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
+        return content.strip(), []
+    if not isinstance(content, list):
+        return "", []
+
+    texts = []
+    tools = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type")
+        if block_type in ("text", "input_text", "output_text", "summary_text"):
+            value = block.get("text")
+            if isinstance(value, str):
+                texts.append(value)
+        elif block_type == "tool_use":
+            name = block.get("name")
+            if isinstance(name, str) and name:
+                tools.append(name)
+    return "\n".join(texts).strip(), tools
+
+
+def is_noise_text(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("<system-reminder>") or stripped.startswith("<task-notification>")
+
+
+def first_and_last_paragraph(text: str) -> str:
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if len(paragraphs) <= 1:
+        return text.strip()
+    if paragraphs[0] == paragraphs[-1]:
+        return paragraphs[0]
+    return paragraphs[0] + "\n\n" + paragraphs[-1]
+
+
+def filter_message_text(role: str, text: str) -> str:
+    if not text or is_noise_text(text):
+        return ""
+    if role == "assistant":
+        return first_and_last_paragraph(text)
+    return text.strip()
+
+
+def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    yield obj
+    except OSError as exc:
+        print("Warning: cannot read %s: %s" % (path, exc), file=sys.stderr)
+
+
+def parse_claude_file(path: Path, start: datetime, end: datetime) -> Optional[SessionData]:
+    session = SessionData(source="claude_code", session_id=path.stem)
+
+    for obj in iter_jsonl(path):
+        obj_type = obj.get("type")
+        if obj.get("sessionId"):
+            session.session_id = obj.get("sessionId")
+        if obj.get("cwd"):
+            session.cwd = obj.get("cwd")
+        if obj.get("gitBranch"):
+            session.git_branch = obj.get("gitBranch")
+
+        if obj_type not in ("user", "assistant"):
+            continue
+
+        timestamp = obj.get("timestamp", "")
+        if not is_in_day(timestamp, start, end):
+            continue
+
+        message = obj.get("message") or {}
+        text, tools = extract_text_and_tools(message.get("content", ""))
+        session.tools.update(tools)
+
+        role = "user" if obj_type == "user" else "assistant"
+        filtered = filter_message_text(role, text)
+        if not filtered:
+            continue
+
+        session.messages.append(ExtractedMessage(
+            source=session.source,
+            role=role,
+            timestamp=timestamp,
+            session_id=session.session_id,
+            cwd=session.cwd,
+            git_branch=session.git_branch,
+            text=filtered,
+        ))
+
+    return session if session.messages or session.tools else None
+
+
+def codex_content_text(content: Any) -> str:
+    text, _tools = extract_text_and_tools(content)
+    return text
+
+
+def extract_codex_developer_summary(text: str) -> str:
+    names = []
+    capture = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("### Available skills"):
+            capture = "skills"
+            continue
+        if stripped.startswith("### Available plugins"):
+            capture = "plugins"
+            continue
+        if stripped.startswith("### ") or stripped.startswith("## "):
+            capture = None
+        if capture and stripped.startswith("- "):
+            item = stripped[2:]
+            backtick_match = re.search(r"`([^`]+)`", item)
+            if backtick_match:
+                name = backtick_match.group(1).strip()
+            elif ": " in item:
+                name = item.split(": ", 1)[0].strip("` ")
+            else:
+                name = item.split(" — ", 1)[0].split(" - ", 1)[0].split(":", 1)[0].strip("` ")
+            if name and "%s: %s" % (capture[:-1], name) not in names:
+                names.append("%s: %s" % (capture[:-1], name))
+    if not names:
+        return ""
+    return "Codex developer context:\n" + "\n".join("- " + name for name in names)
+
+
+def extract_reasoning_summary(payload: Dict[str, Any]) -> str:
+    summary = payload.get("summary")
+    if isinstance(summary, str):
+        return summary.strip()
+    if isinstance(summary, list):
         texts = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                texts.append(block.get("text", ""))
+        for item in summary:
+            if isinstance(item, dict):
+                value = item.get("text") or item.get("summary_text")
+                if isinstance(value, str):
+                    texts.append(value)
+            elif isinstance(item, str):
+                texts.append(item)
         return "\n".join(texts).strip()
     return ""
 
 
-def parse_jsonl(filepath: Path) -> Optional[SessionResult]:
-    messages = []
-    cwd = ""
-
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if not cwd:
-                cwd = obj.get("cwd", "")
-
-            msg_type = obj.get("type")
-            if msg_type not in ("user", "assistant"):
-                continue
-
-            timestamp = obj.get("timestamp", "")
-            message = obj.get("message", {})
-            content = message.get("content", "")
-
-            text = extract_text_from_content(content)
-            if not text:
-                continue
-
-            role = "User" if msg_type == "user" else "Claude"
-            messages.append(Message(timestamp=timestamp, role=role, text=text))
-
-    if not messages:
-        return None
-
-    project_name = derive_project_name(cwd)
-    return SessionResult(project_name=project_name, messages=messages)
+def git_branch_from_meta(meta_git: Any) -> str:
+    if isinstance(meta_git, dict):
+        branch = meta_git.get("branch")
+        if isinstance(branch, str):
+            return branch
+    return ""
 
 
-def is_noise(msg: Message) -> bool:
-    """Filter out system notifications and boilerplate."""
-    text = msg.text
-    if text.startswith("<task-notification>"):
-        return True
-    if text.startswith("<system-reminder>"):
-        return True
-    return False
+def parse_codex_file(path: Path, start: datetime, end: datetime) -> Optional[SessionData]:
+    session = SessionData(source="codex", session_id=path.stem)
+    last_timestamp = ""
 
+    for obj in iter_jsonl(path):
+        timestamp = obj.get("timestamp", "") or last_timestamp
+        if timestamp:
+            last_timestamp = timestamp
 
-def last_paragraph(text: str) -> str:
-    """Extract the last meaningful paragraph from assistant text."""
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    if not paragraphs:
-        return text.strip()
-    # If only one paragraph, return it
-    if len(paragraphs) == 1:
-        return paragraphs[-1]
-    # For multi-paragraph: take last 2 paragraphs (conclusion + context)
-    # but cap at 500 chars to avoid bloating
-    candidate = "\n\n".join(paragraphs[-2:])
-    if len(candidate) <= 500:
-        return candidate
-    return paragraphs[-1]
-
-
-def filter_smart(messages: List[Message]) -> List[Message]:
-    """All user messages + last paragraph of each assistant message."""
-    result = []
-    for msg in messages:
-        if is_noise(msg):
+        if obj.get("type") == "session_meta":
+            payload = obj.get("payload") or {}
+            session.session_id = payload.get("id") or session.session_id
+            session.cwd = payload.get("cwd") or session.cwd
+            session.git_branch = git_branch_from_meta(payload.get("git")) or session.git_branch
             continue
-        if msg.role == "User":
-            result.append(msg)
-        else:
-            trimmed = last_paragraph(msg.text)
-            if trimmed:
-                result.append(Message(
-                    timestamp=msg.timestamp,
-                    role=msg.role,
-                    text=trimmed,
+
+        if obj.get("type") != "response_item":
+            continue
+
+        payload = obj.get("payload") or {}
+        payload_type = payload.get("type")
+        if payload_type == "function_call":
+            name = payload.get("name")
+            if isinstance(name, str) and name:
+                session.tools.update([name])
+            continue
+
+        if not is_in_day(timestamp, start, end):
+            continue
+
+        if payload_type == "message":
+            role = payload.get("role", "")
+            if role not in ("user", "assistant", "developer"):
+                continue
+            text = codex_content_text(payload.get("content", ""))
+            if role == "developer":
+                text = extract_codex_developer_summary(text)
+            filtered = filter_message_text(role, text)
+            if not filtered:
+                continue
+            session.messages.append(ExtractedMessage(
+                source=session.source,
+                role=role,
+                timestamp=timestamp,
+                session_id=session.session_id,
+                cwd=session.cwd,
+                git_branch=session.git_branch,
+                text=filtered,
+            ))
+        elif payload_type == "reasoning":
+            text = extract_reasoning_summary(payload)
+            filtered = filter_message_text("assistant", text)
+            if filtered:
+                session.messages.append(ExtractedMessage(
+                    source=session.source,
+                    role="assistant",
+                    timestamp=timestamp,
+                    session_id=session.session_id,
+                    cwd=session.cwd,
+                    git_branch=session.git_branch,
+                    text="Reasoning summary:\n" + filtered,
                 ))
-    return result
+
+    return session if session.messages or session.tools else None
 
 
-def filter_key_messages(messages: List[Message]) -> List[Message]:
-    """Keep first user + last assistant message per session (lean summary)."""
-    clean = [m for m in messages if not is_noise(m)]
-    if len(clean) <= 2:
-        return clean
-
-    first_user = next((m for m in clean if m.role == "User"), None)
-    last_assistant = next((m for m in reversed(clean) if m.role == "Claude"), None)
-
-    result = []
-    if first_user:
-        result.append(first_user)
-    if last_assistant and last_assistant is not first_user:
-        result.append(last_assistant)
-    return result
+def find_claude_files() -> List[Path]:
+    root = Path.home() / ".claude" / "projects"
+    if not root.exists():
+        return []
+    return sorted(root.rglob("*.jsonl"))
 
 
-def get_today_start_beijing() -> datetime:
-    """Get start of today in Beijing time."""
-    now_beijing = datetime.now(TZ_BEIJING)
-    return now_beijing.replace(hour=0, minute=0, second=0, microsecond=0)
+def find_codex_files(date_str: str) -> List[Path]:
+    root = Path.home() / ".codex"
+    yyyy, mm, dd = date_str.split("-")
+    candidates = []
+    sessions_day = root / "sessions" / yyyy / mm / dd
+    if sessions_day.exists():
+        candidates.extend(sorted(sessions_day.glob("*.jsonl")))
+    archived = root / "archived_sessions"
+    if archived.exists():
+        candidates.extend(sorted(archived.glob("*.jsonl")))
+    return candidates
 
 
-def find_today_sessions() -> List[Tuple[Path, datetime]]:
-    claude_dir = Path.home() / ".claude" / "projects"
-    if not claude_dir.exists():
-        print(f"Error: {claude_dir} not found", file=sys.stderr)
-        sys.exit(1)
+def sort_sessions(sessions: List[SessionData]) -> List[SessionData]:
+    def key(session: SessionData) -> str:
+        if session.messages:
+            return session.messages[0].timestamp
+        return ""
+    return sorted(sessions, key=key)
 
-    today_start = get_today_start_beijing()
-    sessions = []
 
-    for project_dir in claude_dir.iterdir():
-        if not project_dir.is_dir():
+def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
+    stats: Dict[str, Any] = {
+        "date": date_str,
+        "tools_used": {
+            "claude_code": {"sessions": 0, "messages": {"user": 0, "assistant": 0}, "tools": {}},
+            "codex": {"sessions": 0, "messages": {"user": 0, "assistant": 0, "developer": 0}, "tools": {}},
+        },
+        "projects_touched": [],
+        "total_duration_estimate_min": 0,
+    }
+
+    project_sessions: Dict[Tuple[str, str], set] = defaultdict(set)
+
+    for source in ("claude_code", "codex"):
+        source_sessions = [s for s in sessions if s.source == source]
+        stats["tools_used"][source]["sessions"] = len(source_sessions)
+
+        tools = Counter()
+        for session in source_sessions:
+            tools.update(session.tools)
+            project_sessions[(session.project_name, source)].add(session.session_id)
+            timestamps = [parse_timestamp(m.timestamp) for m in session.messages]
+            timestamps = [t for t in timestamps if t is not None]
+            if timestamps:
+                duration = max(timestamps) - min(timestamps)
+                stats["total_duration_estimate_min"] += int(duration.total_seconds() // 60)
+            for message in session.messages:
+                if message.role not in stats["tools_used"][source]["messages"]:
+                    stats["tools_used"][source]["messages"][message.role] = 0
+                stats["tools_used"][source]["messages"][message.role] += 1
+
+        stats["tools_used"][source]["tools"] = dict(sorted(tools.items()))
+
+    projects = []
+    for (name, source), session_ids in sorted(project_sessions.items()):
+        projects.append({"name": name, "source": source, "sessions": len(session_ids)})
+    stats["projects_touched"] = projects
+    return stats
+
+
+def build_markdown(date_str: str, sessions: List[SessionData]) -> str:
+    lines = ["# Filtered Conversations - %s" % date_str, ""]
+    for session in sort_sessions(sessions):
+        if not session.messages:
             continue
-        for jsonl_file in project_dir.glob("*.jsonl"):
-            mtime = datetime.fromtimestamp(
-                jsonl_file.stat().st_mtime
-            ).astimezone(TZ_BEIJING)
-            if mtime >= today_start:
-                sessions.append((jsonl_file, mtime))
-
-    sessions.sort(key=lambda s: s[1])
-    return sessions
-
-
-def to_beijing_time(ts: str) -> str:
-    """Convert ISO 8601 UTC timestamp to Beijing HH:MM."""
-    if not ts:
-        return "??:??"
-    try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        dt_bj = dt.astimezone(TZ_BEIJING)
-        return dt_bj.strftime("%H:%M")
-    except (ValueError, TypeError):
-        return "??:??"
-
-
-def generate_markdown(sessions: List[Tuple[Path, datetime]], mode: str) -> str:
-    today_bj = datetime.now(TZ_BEIJING).strftime("%Y-%m-%d")
-    lines = [f"# Daily Thinking Log — {today_bj}\n"]
-
-    for filepath, _mtime in sessions:
-        result = parse_jsonl(filepath)
-        if not result:
-            continue
-
-        start_time = result.messages[0].timestamp if result.messages else ""
-        time_str = to_beijing_time(start_time) if start_time else "unknown"
-
-        lines.append(f"## Session: {result.project_name}")
-        lines.append(f"**Started**: {time_str}")
+        lines.append("## %s - %s" % (session.source, session.project_name))
         lines.append("")
-
-        if mode == "key":
-            display_msgs = filter_key_messages(result.messages)
-        elif mode == "smart":
-            display_msgs = filter_smart(result.messages)
-        else:
-            display_msgs = result.messages
-
-        for msg in display_msgs:
-            time_str = to_beijing_time(msg.timestamp)
-            lines.append(f"### {time_str} — {msg.role}")
-            lines.append(msg.text)
+        lines.append("- session_id: `%s`" % session.session_id)
+        lines.append("- cwd: `%s`" % (session.cwd or "unknown"))
+        if session.git_branch:
+            lines.append("- git_branch: `%s`" % session.git_branch)
+        lines.append("")
+        for message in session.messages:
+            lines.append("### %s - %s" % (local_time(message.timestamp), message.role))
             lines.append("")
-
-        lines.append("---\n")
-
+            lines.append(message.text)
+            lines.append("")
+        lines.append("---")
+        lines.append("")
     return "\n".join(lines)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract today's Claude Code conversations")
-    parser.add_argument(
-        "--mode", choices=["smart", "key", "full"], default="smart",
-        help="smart = all user + last paragraph of assistant (default); key = first+last only; full = all"
-    )
-    args = parser.parse_args()
+def main() -> None:
+    args = parse_args()
+    date_str = target_date(args.date)
+    start, end = day_bounds(date_str)
 
-    output_dir = Path(__file__).parent.parent / "output"
-    output_dir.mkdir(exist_ok=True)
+    sessions = []
+    for path in find_claude_files():
+        parsed = parse_claude_file(path, start, end)
+        if parsed:
+            sessions.append(parsed)
+    for path in find_codex_files(date_str):
+        parsed = parse_codex_file(path, start, end)
+        if parsed:
+            sessions.append(parsed)
 
-    today_bj = datetime.now(TZ_BEIJING).strftime("%Y-%m-%d")
-    output_file = output_dir / f"{today_bj}-daily-thinking.md"
+    output_root = Path(args.output_dir) / date_str
+    output_root.mkdir(parents=True, exist_ok=True)
+    conversations_path = output_root / "filtered_conversations.md"
+    stats_path = output_root / "stats.json"
 
-    sessions = find_today_sessions()
-    if not sessions:
-        print("No sessions found for today.")
-        sys.exit(0)
+    conversations = build_markdown(date_str, sessions)
+    stats = build_stats(date_str, sessions)
 
-    print(f"Found {len(sessions)} session(s) for today.")
+    conversations_path.write_text(conversations, encoding="utf-8")
+    stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    markdown = generate_markdown(sessions, args.mode)
-    output_file.write_text(markdown, encoding="utf-8")
-    print(f"Output written to: {output_file}")
-
-    total_chars = len(markdown)
-    print(f"Total size: {total_chars:,} characters (~{total_chars // 4:,} tokens)")
-    print(f"Mode: {args.mode}")
+    print("Date: %s" % date_str)
+    print("Sessions: claude_code=%s codex=%s" % (
+        stats["tools_used"]["claude_code"]["sessions"],
+        stats["tools_used"]["codex"]["sessions"],
+    ))
+    print("Output: %s" % conversations_path)
+    print("Stats: %s" % stats_path)
 
 
 if __name__ == "__main__":
