@@ -45,3 +45,6 @@
 | 2026-05-14 | Tone fix: rewrote prompts in 02_session_summarize.py and 03_summarize.py to produce diary-style output instead of corporate report style |
 | 2026-05-14 | Added few-shot good/bad examples, section-specific writing guides, first-person tone instruction |
 | 2026-05-14 | Verified: re-ran full pipeline for 2026-05-14, output tone significantly improved. Next: commit + Task 04 |
+| 2026-05-14 | Task 04 complete — `04_daily_pipeline.py` (orchestrator), `05_weekly.py`, `06_monthly.py`, launchd plist, `run_pipeline.sh` |
+| 2026-05-14 | All weekly/monthly prompts follow diary-style tone: first-person, bad/good examples, section-specific guides |
+| 2026-05-14 | launchd runs `run_pipeline.sh` at midnight; script auto-triggers weekly (Sunday) and monthly (last day) rollups |
