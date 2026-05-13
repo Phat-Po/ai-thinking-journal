@@ -66,9 +66,15 @@ def split_sessions(text):
 def build_session_prompt(header, body):
     # type: (str, str) -> str
     return """Summarize this coding session in 3-5 bullet points.
-Focus on: what task was being done, what decisions were made,
-what was the outcome. Skip status updates and acknowledgments.
+Write casually and specifically, like quick personal notes — not a formal report.
+Focus on: what was the person trying to do, what surprised them or got stuck,
+what did they decide and WHY, what was the outcome.
+Skip status updates, acknowledgments, and vague statements.
+Use concrete details: file names, error messages, numbers, tool names.
 Output in the same language as the conversation.
+
+BAD: "系統性排查 CLI hooks 問題，確認版本兼容性並形成解決方案"
+GOOD: "Codex CLI 一直報 hook has problem，查了半天發現是 --enable hooks 這個 flag 根本不支持，刪掉就好了"
 
 Session: %s
 

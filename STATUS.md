@@ -42,3 +42,6 @@
 | 2026-05-14 | Added OpenAI backend support (--backend openai\|ollama), default openai with gpt-4.1-mini |
 | 2026-05-14 | Full pipeline verified: 15 sessions → session_summaries.md (4KB) → daily journal. Cost ~$0.04/day |
 | 2026-05-14 | Repo clean at `7e1c82a`. Next: Task 04 — daily orchestration, launchd, weekly/monthly rollups |
+| 2026-05-14 | Tone fix: rewrote prompts in 02_session_summarize.py and 03_summarize.py to produce diary-style output instead of corporate report style |
+| 2026-05-14 | Added few-shot good/bad examples, section-specific writing guides, first-person tone instruction |
+| 2026-05-14 | Verified: re-ran full pipeline for 2026-05-14, output tone significantly improved. Next: commit + Task 04 |
