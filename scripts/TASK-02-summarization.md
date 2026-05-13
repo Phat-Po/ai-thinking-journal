@@ -42,3 +42,4 @@ python3 scripts/02_summarize.py --model qwen3-coder:480b-cloud
 - [x] Generates YAML metadata from `stats.json`.
 - [x] Writes `ai-journal/daily/YYYY-MM-DD.md`.
 - [x] Supports dry-run prompt inspection.
+- [x] Prompt clarifies that `available_skills` and `available_plugins` are environment inventory, not actual usage.

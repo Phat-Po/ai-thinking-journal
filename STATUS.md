@@ -33,3 +33,5 @@
 | 2026-05-14 | Verified extraction for 2026-05-10: Claude Code 18 sessions, Codex 9 sessions |
 | 2026-05-14 | Verified extraction for 2026-05-14: Claude Code 12 sessions, Codex 6 sessions |
 | 2026-05-14 | Verified summarization for 2026-05-14: generated `ai-journal/daily/2026-05-14.md` |
+| 2026-05-14 | Noise audit applied: filtered Codex AGENTS bootstrap messages, moved developer skills/plugins to stats only, dropped Codex reasoning summaries, dropped slash-command markup, stripped system-reminder tags, merged same-minute assistant messages |
+| 2026-05-14 | Verified 2026-05-10 filtered output after noise fixes: AGENTS=0, skill lines=0, Reasoning summary=0, local-command-caveat=0, size=169,907 bytes, lines=4,328 |

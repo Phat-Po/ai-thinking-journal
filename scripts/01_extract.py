@@ -41,6 +41,8 @@ class SessionData:
     git_branch: str = ""
     messages: List[ExtractedMessage] = field(default_factory=list)
     tools: Counter = field(default_factory=Counter)
+    available_skills: List[str] = field(default_factory=list)
+    available_plugins: List[str] = field(default_factory=list)
 
     @property
     def project_name(self) -> str:
@@ -127,9 +129,33 @@ def extract_text_and_tools(content: Any) -> Tuple[str, List[str]]:
     return "\n".join(texts).strip(), tools
 
 
+def is_codex_bootstrap_message(text: str) -> bool:
+    return (
+        "AGENTS.md instructions for" in text
+        or "<INSTRUCTIONS>" in text
+        or "</INSTRUCTIONS>" in text
+    )
+
+
+def is_slash_command_noise(text: str) -> bool:
+    stripped = text.strip()
+    return (
+        "<local-command-caveat>" in text
+        or "<command-name>" in text
+        or "<local-command-stdout>" in text
+        or stripped.startswith("<command-")
+    )
+
+
+def strip_system_reminders(text: str) -> str:
+    text = re.sub(r"<system-reminder>.*?</system-reminder>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<system-reminder>.*", "", text, flags=re.DOTALL)
+    return text.strip()
+
+
 def is_noise_text(text: str) -> bool:
     stripped = text.strip()
-    return stripped.startswith("<system-reminder>") or stripped.startswith("<task-notification>")
+    return stripped.startswith("<task-notification>") or is_slash_command_noise(text)
 
 
 def first_and_last_paragraph(text: str) -> str:
@@ -142,11 +168,40 @@ def first_and_last_paragraph(text: str) -> str:
 
 
 def filter_message_text(role: str, text: str) -> str:
+    if not text:
+        return ""
+    text = strip_system_reminders(text)
     if not text or is_noise_text(text):
         return ""
     if role == "assistant":
         return first_and_last_paragraph(text)
     return text.strip()
+
+
+def merge_consecutive_assistant_messages(messages: List[ExtractedMessage]) -> List[ExtractedMessage]:
+    merged: List[ExtractedMessage] = []
+    for message in messages:
+        minute = local_time(message.timestamp)
+        if (
+            merged
+            and message.role == "assistant"
+            and merged[-1].role == "assistant"
+            and message.session_id == merged[-1].session_id
+            and minute == local_time(merged[-1].timestamp)
+        ):
+            previous = merged[-1]
+            merged[-1] = ExtractedMessage(
+                source=previous.source,
+                role=previous.role,
+                timestamp=previous.timestamp,
+                session_id=previous.session_id,
+                cwd=previous.cwd,
+                git_branch=previous.git_branch,
+                text=previous.text.rstrip() + "\n\n" + message.text.lstrip(),
+            )
+        else:
+            merged.append(message)
+    return merged
 
 
 def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -204,6 +259,7 @@ def parse_claude_file(path: Path, start: datetime, end: datetime) -> Optional[Se
             text=filtered,
         ))
 
+    session.messages = merge_consecutive_assistant_messages(session.messages)
     return session if session.messages or session.tools else None
 
 
@@ -212,8 +268,9 @@ def codex_content_text(content: Any) -> str:
     return text
 
 
-def extract_codex_developer_summary(text: str) -> str:
-    names = []
+def extract_codex_developer_context(text: str) -> Tuple[List[str], List[str]]:
+    skills: List[str] = []
+    plugins: List[str] = []
     capture = None
     for line in text.splitlines():
         stripped = line.strip()
@@ -234,11 +291,11 @@ def extract_codex_developer_summary(text: str) -> str:
                 name = item.split(": ", 1)[0].strip("` ")
             else:
                 name = item.split(" — ", 1)[0].split(" - ", 1)[0].split(":", 1)[0].strip("` ")
-            if name and "%s: %s" % (capture[:-1], name) not in names:
-                names.append("%s: %s" % (capture[:-1], name))
-    if not names:
-        return ""
-    return "Codex developer context:\n" + "\n".join("- " + name for name in names)
+            if capture == "skills" and name and name not in skills:
+                skills.append(name)
+            elif capture == "plugins" and name and name not in plugins:
+                plugins.append(name)
+    return skills, plugins
 
 
 def extract_reasoning_summary(payload: Dict[str, Any]) -> str:
@@ -302,7 +359,16 @@ def parse_codex_file(path: Path, start: datetime, end: datetime) -> Optional[Ses
                 continue
             text = codex_content_text(payload.get("content", ""))
             if role == "developer":
-                text = extract_codex_developer_summary(text)
+                skills, plugins = extract_codex_developer_context(text)
+                for skill in skills:
+                    if skill not in session.available_skills:
+                        session.available_skills.append(skill)
+                for plugin in plugins:
+                    if plugin not in session.available_plugins:
+                        session.available_plugins.append(plugin)
+                continue
+            if role == "user" and is_codex_bootstrap_message(text):
+                continue
             filtered = filter_message_text(role, text)
             if not filtered:
                 continue
@@ -316,19 +382,9 @@ def parse_codex_file(path: Path, start: datetime, end: datetime) -> Optional[Ses
                 text=filtered,
             ))
         elif payload_type == "reasoning":
-            text = extract_reasoning_summary(payload)
-            filtered = filter_message_text("assistant", text)
-            if filtered:
-                session.messages.append(ExtractedMessage(
-                    source=session.source,
-                    role="assistant",
-                    timestamp=timestamp,
-                    session_id=session.session_id,
-                    cwd=session.cwd,
-                    git_branch=session.git_branch,
-                    text="Reasoning summary:\n" + filtered,
-                ))
+            continue
 
+    session.messages = merge_consecutive_assistant_messages(session.messages)
     return session if session.messages or session.tools else None
 
 
@@ -365,7 +421,13 @@ def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
         "date": date_str,
         "tools_used": {
             "claude_code": {"sessions": 0, "messages": {"user": 0, "assistant": 0}, "tools": {}},
-            "codex": {"sessions": 0, "messages": {"user": 0, "assistant": 0, "developer": 0}, "tools": {}},
+            "codex": {
+                "sessions": 0,
+                "messages": {"user": 0, "assistant": 0},
+                "tools": {},
+                "available_skills": [],
+                "available_plugins": [],
+            },
         },
         "projects_touched": [],
         "total_duration_estimate_min": 0,
@@ -378,8 +440,16 @@ def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
         stats["tools_used"][source]["sessions"] = len(source_sessions)
 
         tools = Counter()
+        available_skills = []
+        available_plugins = []
         for session in source_sessions:
             tools.update(session.tools)
+            for skill in session.available_skills:
+                if skill not in available_skills:
+                    available_skills.append(skill)
+            for plugin in session.available_plugins:
+                if plugin not in available_plugins:
+                    available_plugins.append(plugin)
             project_sessions[(session.project_name, source)].add(session.session_id)
             timestamps = [parse_timestamp(m.timestamp) for m in session.messages]
             timestamps = [t for t in timestamps if t is not None]
@@ -392,6 +462,9 @@ def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
                 stats["tools_used"][source]["messages"][message.role] += 1
 
         stats["tools_used"][source]["tools"] = dict(sorted(tools.items()))
+        if source == "codex":
+            stats["tools_used"][source]["available_skills"] = sorted(available_skills)
+            stats["tools_used"][source]["available_plugins"] = sorted(available_plugins)
 
     projects = []
     for (name, source), session_ids in sorted(project_sessions.items()):

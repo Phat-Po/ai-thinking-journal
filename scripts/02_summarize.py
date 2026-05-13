@@ -125,6 +125,8 @@ Produce a daily thinking journal entry.
 - The "工具使用觀察" section should note patterns in HOW different tools
   were used (exploration vs execution, which tool for which type of thinking),
   NOT just list what tools were called
+- `available_skills` and `available_plugins` are environment inventory only.
+  They do NOT mean those skills/plugins were used today.
 - The "原始對話索引" section should be a concise index, not a transcript.
   For each session: 2-4 bullet points summarizing what happened, nothing more.
 </rules>
