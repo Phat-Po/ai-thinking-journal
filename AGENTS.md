@@ -16,6 +16,10 @@ Automated nightly pipeline that extracts AI conversation transcripts from Claude
 - Summaries are local-only by default (git push requires explicit approval)
 - Respect file permissions (mode 600)
 
+## XHS Poster Defaults
+
+- When using the `xhsposter-wpd` skill from this project, default to `Manga / Comic` style unless the operator explicitly requests a different style.
+
 ## Task Sequence
 
 1. Extraction POC — Python script to scan and extract today's conversations
