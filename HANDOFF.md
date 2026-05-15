@@ -2,12 +2,12 @@
 
 ## Current Status
 
-Task 01 (Extraction) - complete, HTML comment separators + dedup logic
+Task 01 (Extraction) - complete, HTML comment separators + dedup logic + away_summaries
 Task 02 (Session Summarization) - complete, per-session LLM summaries via OpenAI or Ollama
 Task 03 (Daily Summarization) - complete, consumes session summaries instead of raw conversations
 Task 04 (Automation / Weekly / Monthly) - **complete**
 
-Latest commit: `86d3f85` — tone fix applied.
+Latest commit: `2acac3a` — journals + weekly rollups generated.
 
 ## Pipeline Flow (5-step)
 
@@ -36,10 +36,10 @@ Cost: ~$0.04/day with gpt-4.1-mini.
 
 `launchd/com.pohanlee.daily-thinking-summary.plist` — runs at midnight daily.
 
-### To install (after review):
+### Installed:
 ```bash
-cp launchd/com.pohanlee.daily-thinking-summary.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.pohanlee.daily-thinking-summary.plist
+launchctl list | grep daily-thinking
+# -	0	com.pohanlee.daily-thinking-summary
 ```
 
 ### To check status:
@@ -91,21 +91,19 @@ scripts/04_daily_pipeline.py       — orchestrator: runs 01→02→03, idempote
 scripts/05_weekly.py               — weekly rollup (7 daily → weekly journal)
 scripts/06_monthly.py              — monthly rollup (weekly + daily YAML → monthly journal)
 scripts/run_pipeline.sh            — launchd wrapper (daily + conditional weekly/monthly)
-launchd/com.pohanlee.daily-thinking-summary.plist — macOS scheduling
-scripts/TASK-01-extraction-poc.md  — task 01 spec (done)
-scripts/TASK-02-summarization.md   — task 02 spec (done)
-scripts/TASK-03-automation.md      — task 03/04 spec (done, filenames outdated)
-ai-thinking-journal-product-spec.md — product spec
-ai-journal/daily/2026-05-14.md     — verified sample output
+launchd/com.pohanlee.daily-thinking-summary.plist — macOS scheduling (installed)
+skills/journal-xhsposter/          — journal poster prompt generation skill
+ai-journal/posters/POSTER_WORKFLOW.md — poster workflow doc
+ai-journal/posters/*.png           — generated poster covers
+ai-journal/daily/*.md              — daily journals (7 files: 05-01 through 05-14)
+ai-journal/weekly/*.md             — weekly rollups (W18, W19)
 HANDOFF.md                         — this file
 STATUS.md                          — chronological event log
-INVESTIGATION.md                   — initial feasibility investigation
 ```
 
 ## What Remains
 
-Nothing in the current scope. Potential future work:
-- Historical data backfill (Codex has 6 months of data)
+- Monthly rollup not yet tested with real data
 - Obsidian vault integration (move output into actual vault)
 - Git sync option for cloud backup
 - Prompt versioning (track prompt changes over time)

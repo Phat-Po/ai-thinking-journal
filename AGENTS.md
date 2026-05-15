@@ -18,7 +18,16 @@ Automated nightly pipeline that extracts AI conversation transcripts from Claude
 
 ## XHS Poster Defaults
 
-- When using the `xhsposter-wpd` skill from this project, default to `Manga / Comic` style unless the operator explicitly requests a different style.
+- **Primary skill**: `journal-xhsposter` (`skills/journal-xhsposter/SKILL.md`) — generates journal poster prompts from daily/weekly/monthly markdown. Always apply `POSTER_WORKFLOW.md` as the project layer first.
+- **Fallback skill**: `xhsposter-wpd` — only for Wild Product Dept. branded posters. Not for journal posters.
+- Default to `Manga / Comic` style unless the operator explicitly requests a different style.
+- **Poster modes**: Weekly posters have two modes. Default is `project-narrative` (project breakthroughs, bottlenecks, next moves). Use `internal-review` only when operator explicitly asks for technical/workflow recap.
+- In project-narrative mode: the poster answers "这周项目推进到了哪里？", not "这周执行了哪些技术操作？". Do not copy weekly summary bullets directly — use context lookup to enrich project stories.
+- Treat daily, weekly, and monthly journal posters as visual diary / recap posters, not slogan covers.
+- Extract and show five story blocks by default: current mood, solved problems, blockers, project outcomes, and next plan.
+- Prefer visual metaphors, manga panels, badges, objects, arrows, stamps, and progress marks over long text.
+- Avoid internal-only labels, task IDs, or shorthand that outside viewers cannot understand. Translate them into plain visual concepts.
+- Keep cover text minimal: one main title, one short hook, and only a few tiny labels where they improve comprehension.
 
 ## Task Sequence
 

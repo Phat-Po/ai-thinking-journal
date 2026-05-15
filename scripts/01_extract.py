@@ -44,6 +44,7 @@ class SessionData:
     tools: Counter = field(default_factory=Counter)
     available_skills: List[str] = field(default_factory=list)
     available_plugins: List[str] = field(default_factory=list)
+    away_summaries: List[str] = field(default_factory=list)
 
     @property
     def project_name(self) -> str:
@@ -234,6 +235,14 @@ def parse_claude_file(path: Path, start: datetime, end: datetime) -> Optional[Se
         if obj.get("gitBranch"):
             session.git_branch = obj.get("gitBranch")
 
+        if obj_type == "system" and obj.get("subtype") == "away_summary":
+            content = (obj.get("content") or "").strip()
+            if content:
+                content = re.sub(r"\s*\(disable recaps in /config\)\s*$", "", content)
+                if content:
+                    session.away_summaries.append(content)
+            continue
+
         if obj_type not in ("user", "assistant"):
             continue
 
@@ -261,7 +270,7 @@ def parse_claude_file(path: Path, start: datetime, end: datetime) -> Optional[Se
         ))
 
     session.messages = merge_consecutive_assistant_messages(session.messages)
-    return session if session.messages or session.tools else None
+    return session if session.messages or session.tools or session.away_summaries else None
 
 
 def codex_content_text(content: Any) -> str:
@@ -516,6 +525,10 @@ def build_markdown(date_str: str, sessions: List[SessionData]) -> str:
         lines.append("- cwd: `%s`" % (session.cwd or "unknown"))
         if session.git_branch:
             lines.append("- git_branch: `%s`" % session.git_branch)
+        if session.away_summaries:
+            lines.append("- recap:")
+            for summary in session.away_summaries:
+                lines.append("  - %s" % summary)
         lines.append("")
         for message in session.messages:
             lines.append("<!-- MSG: %s - %s -->" % (local_time(message.timestamp), message.role))

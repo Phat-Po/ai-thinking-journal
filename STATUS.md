@@ -47,4 +47,8 @@
 | 2026-05-14 | Verified: re-ran full pipeline for 2026-05-14, output tone significantly improved. Next: commit + Task 04 |
 | 2026-05-14 | Task 04 complete — `04_daily_pipeline.py` (orchestrator), `05_weekly.py`, `06_monthly.py`, launchd plist, `run_pipeline.sh` |
 | 2026-05-14 | All weekly/monthly prompts follow diary-style tone: first-person, bad/good examples, section-specific guides |
-| 2026-05-14 | launchd runs `run_pipeline.sh` at midnight; script auto-triggers weekly (Sunday) and monthly (last day) rollups |
+| 2026-05-14 | launchd installed: `com.pohanlee.daily-thinking-summary` loaded in ~/Library/LaunchAgents |
+| 2026-05-14 | Backfilled 7 daily journals (05-01 through 05-10) + 2 weekly rollups (W18, W19). API cost ~$0.24 |
+| 2026-05-15 | Added `away_summaries` extraction in 01_extract.py — captures Claude's system recap messages |
+| 2026-05-15 | Added `journal-xhsposter` skill + `POSTER_WORKFLOW.md` for visual journal poster generation |
+| 2026-05-15 | Generated W18/W19 manga-style poster covers |
