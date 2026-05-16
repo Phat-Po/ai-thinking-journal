@@ -2,7 +2,7 @@
 set -u
 
 # Daily Thinking Summary — launchd wrapper
-# Runs daily pipeline, plus weekly (Sunday) and monthly (last day of month).
+# Runs yesterday's daily pipeline, plus weekly/monthly rollups when a period closes.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -10,6 +10,9 @@ LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
 LOG_FILE="$LOG_DIR/pipeline-$(date +%Y%m%d-%H%M%S).log"
+
+YESTERDAY="$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d yesterday +%Y-%m-%d)"
+PREVIOUS_MONTH="$(date -v-1d +%Y-%m 2>/dev/null || date -d yesterday +%Y-%m)"
 
 {
   echo "=== Pipeline started: $(date) ==="
@@ -23,39 +26,39 @@ LOG_FILE="$LOG_DIR/pipeline-$(date +%Y%m%d-%H%M%S).log"
 
   cd "$PROJECT_DIR" || exit 1
 
-  # Step 1: Daily pipeline (always)
-  echo "--- Daily pipeline ---"
-  python3 scripts/04_daily_pipeline.py
+  # Step 1: Daily pipeline (always summarize the completed previous day)
+  echo "--- Daily pipeline ($YESTERDAY) ---"
+  python3 scripts/04_daily_pipeline.py --date "$YESTERDAY"
   daily_status=$?
   if [ $daily_status -ne 0 ]; then
     echo "ERROR: Daily pipeline failed (exit $daily_status)"
     exit 1
   fi
 
-  # Step 2: Weekly rollup (on Sundays)
+  # Step 2: Weekly rollup (on Mondays, summarize the week that ended yesterday)
   DOW=$(date +%u)  # 1=Mon, 7=Sun
-  if [ "$DOW" = "7" ]; then
-    echo "--- Weekly rollup ---"
-    python3 scripts/05_weekly.py
+  if [ "$DOW" = "1" ]; then
+    echo "--- Weekly rollup ($YESTERDAY) ---"
+    python3 scripts/05_weekly.py --date "$YESTERDAY"
     weekly_status=$?
     if [ $weekly_status -ne 0 ]; then
       echo "WARNING: Weekly rollup failed (exit $weekly_status)"
     fi
   else
-    echo "--- Weekly rollup skipped (not Sunday, DOW=$DOW) ---"
+    echo "--- Weekly rollup skipped (not Monday, DOW=$DOW) ---"
   fi
 
-  # Step 3: Monthly rollup (on last day of month)
-  TOMORROW_DAY=$(date -v+1d +%d 2>/dev/null || date -d tomorrow +%d 2>/dev/null)
-  if [ "$TOMORROW_DAY" = "01" ]; then
-    echo "--- Monthly rollup ---"
-    python3 scripts/06_monthly.py
+  # Step 3: Monthly rollup (on the 1st, summarize the month that ended yesterday)
+  TODAY_DAY=$(date +%d)
+  if [ "$TODAY_DAY" = "01" ]; then
+    echo "--- Monthly rollup ($PREVIOUS_MONTH) ---"
+    python3 scripts/06_monthly.py --month "$PREVIOUS_MONTH"
     monthly_status=$?
     if [ $monthly_status -ne 0 ]; then
       echo "WARNING: Monthly rollup failed (exit $monthly_status)"
     fi
   else
-    echo "--- Monthly rollup skipped (not last day of month) ---"
+    echo "--- Monthly rollup skipped (not first day of month) ---"
   fi
 
   echo "=== Pipeline finished: $(date) ==="
