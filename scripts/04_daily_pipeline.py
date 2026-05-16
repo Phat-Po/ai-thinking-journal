@@ -9,6 +9,7 @@ Idempotent: skips steps whose output already exists unless --force is given.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -25,7 +26,7 @@ def parse_args() -> argparse.Namespace:
                         help="LLM backend for steps 02 and 03.")
     parser.add_argument("--model", default=None, help="Model name override.")
     parser.add_argument("--output-dir", default=str(Path(__file__).parent.parent / "output"))
-    parser.add_argument("--journal-root", default=str(Path(__file__).parent.parent / "ai-journal"))
+    parser.add_argument("--journal-root", default=os.getenv("AI_JOURNAL_ROOT", str(Path(__file__).parent.parent / "ai-journal")))
     parser.add_argument("--force", action="store_true", help="Re-run even if output exists.")
     parser.add_argument("--dry-run", action="store_true", help="Print what would run.")
     return parser.parse_args()
