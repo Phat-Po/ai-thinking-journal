@@ -4,6 +4,9 @@ set -u
 # Daily Thinking Summary — launchd wrapper
 # Runs yesterday's daily pipeline, plus weekly/monthly rollups when a period closes.
 
+# Ensure lark-cli (under nvm) is reachable when run from launchd's minimal PATH
+export PATH="/Users/pohanlee/.nvm/versions/node/v20.20.2/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="$PROJECT_DIR/logs"
@@ -34,6 +37,10 @@ PREVIOUS_MONTH="$(date -v-1d +%Y-%m 2>/dev/null || date -d yesterday +%Y-%m)"
     echo "ERROR: Daily pipeline failed (exit $daily_status)"
     exit 1
   fi
+
+  # Step 1b: Daily poster prompt (non-blocking — failure does not affect daily journal)
+  echo "--- Daily poster ($YESTERDAY) ---"
+  python3 scripts/07_daily_poster.py --date "$YESTERDAY" || echo "WARNING: poster step failed (non-blocking)"
 
   # Step 2: Weekly rollup (on Mondays, summarize the week that ended yesterday)
   DOW=$(date +%u)  # 1=Mon, 7=Sun

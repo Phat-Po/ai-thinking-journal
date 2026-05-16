@@ -187,9 +187,9 @@ After image generation:
 
 1. Locate the generated PNG under `$CODEX_HOME/generated_images/`.
 2. Check dimensions with `sips -g pixelWidth -g pixelHeight`.
-3. Accept only if the width / height ratio is within 0.5% of 4:5.
+3. Accept if the width / height ratio is within ±15% of 4:5 (roughly portrait — block only obvious 横图 / 正方形).
 4. Copy the accepted image into `ai-journal/posters/`.
 5. Leave the original generated image in place.
 6. Report the saved project path and measured dimensions.
 
-If three generations fail the 4:5 ratio check, stop and report the measured sizes.
+If the ratio is grossly off (clearly landscape or square), warn and report measured sizes — do not auto-regenerate.

@@ -149,8 +149,8 @@ When generating the image:
 - Use the same style, mascots, and prompt from step 6
 - Preserve all content — do not silently simplify
 - Verify the generated image: `sips -g pixelWidth -g pixelHeight`
-- Accept if width/height ratio is within 0.5% of 4:5
-- If ratio fails, reject and regenerate (up to 3 attempts)
+- Accept if width/height ratio is within ±15% of 4:5 (i.e. roughly portrait — block only obvious 横图 / 正方形)
+- If ratio is grossly off, warn but still accept; do not auto-regenerate
 - Do not crop, stretch, or pad to force compliance
 - Copy accepted image to `ai-journal/posters/`
 - Use filename pattern: `<date-or-week>-manga-cover-vN.png`
@@ -181,5 +181,5 @@ When generating the image:
 - One visual style per poster
 - Keep element usage to the fixed journal mascot family only
 - Default to prompt mode — do not generate images without confirmation
-- In image mode, use 0.5% ratio tolerance around 4:5
+- In image mode, use a generous ±15% tolerance around 4:5 (roughly portrait is fine; only block obvious 横图 / 正方形)
 - Never fix aspect ratio by cropping, stretching, or padding
