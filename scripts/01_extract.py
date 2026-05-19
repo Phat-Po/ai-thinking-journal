@@ -45,6 +45,8 @@ class SessionData:
     available_skills: List[str] = field(default_factory=list)
     available_plugins: List[str] = field(default_factory=list)
     away_summaries: List[str] = field(default_factory=list)
+    ai_title: str = ""
+    last_prompt: str = ""
 
     @property
     def project_name(self) -> str:
@@ -62,6 +64,11 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default=str(Path(__file__).parent.parent / "output"),
         help="Directory for extraction artifacts.",
+    )
+    parser.add_argument(
+        "--signal-only",
+        action="store_true",
+        help="Extract only high-signal data (away_summary, ai-title, last-prompt, user text).",
     )
     return parser.parse_args()
 
@@ -136,6 +143,7 @@ def is_codex_bootstrap_message(text: str) -> bool:
         "AGENTS.md instructions for" in text
         or "<INSTRUCTIONS>" in text
         or "</INSTRUCTIONS>" in text
+        or text.strip().startswith("<environment_context>")
     )
 
 
@@ -241,6 +249,18 @@ def parse_claude_file(path: Path, start: datetime, end: datetime) -> Optional[Se
                 content = re.sub(r"\s*\(disable recaps in /config\)\s*$", "", content)
                 if content:
                     session.away_summaries.append(content)
+            continue
+
+        if obj_type == "ai-title":
+            title = (obj.get("aiTitle") or "").strip()
+            if title and not session.ai_title:
+                session.ai_title = title
+            continue
+
+        if obj_type == "last-prompt":
+            prompt = (obj.get("lastPrompt") or "").strip()
+            if prompt and not session.last_prompt:
+                session.last_prompt = prompt
             continue
 
         if obj_type not in ("user", "assistant"):
@@ -541,6 +561,86 @@ def build_markdown(date_str: str, sessions: List[SessionData]) -> str:
     return "\n".join(lines)
 
 
+def build_signal_markdown(date_str: str, sessions: List[SessionData]) -> str:
+    lines = []  # type: List[str]
+    # Separate by source, then group by project
+    for source_label, source_key in [("Claude Code", "claude_code"), ("Codex CLI", "codex")]:
+        source_sessions = [s for s in sessions if s.source == source_key]
+        if not source_sessions:
+            continue
+
+        project_groups: Dict[str, List[SessionData]] = defaultdict(list)
+        for session in sort_sessions(source_sessions):
+            has_signal = session.away_summaries or session.ai_title or session.last_prompt
+            user_msgs = [m for m in session.messages if m.role == "user"]
+            if has_signal or user_msgs:
+                project_groups[session.project_name].append(session)
+
+        if not project_groups:
+            continue
+
+        lines.append("# %s — %s" % (source_label, date_str))
+        lines.append("")
+
+        for project_name in sorted(project_groups.keys()):
+            project_sessions = project_groups[project_name]
+            lines.append("## %s" % project_name)
+            lines.append("")
+
+            seen_prompts = set()  # type: Set[str]
+
+            for session in project_sessions:
+                if session.ai_title:
+                    lines.append("### %s" % session.ai_title)
+                    lines.append("")
+
+                if session.away_summaries:
+                    last_summary = session.away_summaries[-1]
+                    lines.append("**Recap:**")
+                    lines.append("> %s" % last_summary)
+                    lines.append("")
+
+                if session.last_prompt:
+                    prompt_key = session.last_prompt[:200]
+                    if prompt_key not in seen_prompts:
+                        seen_prompts.add(prompt_key)
+                        prompt_preview = session.last_prompt[:300]
+                        if len(session.last_prompt) > 300:
+                            prompt_preview += "..."
+                        lines.append("**Prompt:**")
+                        lines.append("> %s" % prompt_preview)
+                        lines.append("")
+
+                user_msgs = [m for m in session.messages if m.role == "user"]
+                if user_msgs:
+                    lines.append("**User said:**")
+                    for msg in user_msgs:
+                        text = msg.text[:200]
+                        if len(msg.text) > 200:
+                            text += "..."
+                        lines.append("- [%s] %s" % (local_time(msg.timestamp), text))
+                    lines.append("")
+
+            # For Codex: also show assistant text (no away_summary available)
+            if session.source == "codex":
+                asst_msgs = [m for m in session.messages if m.role == "assistant"]
+                if asst_msgs:
+                    lines.append("**Agent said:**")
+                    for msg in asst_msgs[:10]:
+                        text = msg.text[:200]
+                        if len(msg.text) > 200:
+                            text += "..."
+                        lines.append("- [%s] %s" % (local_time(msg.timestamp), text))
+                    if len(asst_msgs) > 10:
+                        lines.append("- ... (%d more)" % (len(asst_msgs) - 10))
+                    lines.append("")
+
+            lines.append("---")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def main() -> None:
     args = parse_args()
     date_str = target_date(args.date)
@@ -564,20 +664,39 @@ def main() -> None:
     conversations = build_markdown(date_str, sessions)
     stats = build_stats(date_str, sessions)
 
-    if "<!-- SESSION:" not in conversations:
-        (output_root / "filtered_conversations.EMPTY").write_text(conversations, encoding="utf-8")
-        print("WARNING: No sessions with messages found for %s" % date_str)
-    else:
-        conversations_path.write_text(conversations, encoding="utf-8")
-        stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if args.signal_only:
+        signal_path = output_root / "signal_conversations.md"
+        signal_content = build_signal_markdown(date_str, sessions)
+        signal_path.write_text(signal_content, encoding="utf-8")
 
-    print("Date: %s" % date_str)
-    print("Sessions: claude_code=%s codex=%s" % (
-        stats["tools_used"]["claude_code"]["sessions"],
-        stats["tools_used"]["codex"]["sessions"],
-    ))
-    print("Output: %s" % conversations_path)
-    print("Stats: %s" % stats_path)
+        full_size = len(conversations.encode("utf-8"))
+        signal_size = len(signal_content.encode("utf-8"))
+        ratio = (signal_size / full_size * 100) if full_size > 0 else 0
+
+        print("Date: %s (signal-only mode)" % date_str)
+        print("Sessions: %d total" % len(sessions))
+        print("Full extract: %d chars → %s" % (full_size, conversations_path))
+        print("Signal extract: %d chars (%.1f%% of full) → %s" % (signal_size, ratio, signal_path))
+
+        # Also write full version for comparison
+        if "<!-- SESSION:" in conversations:
+            conversations_path.write_text(conversations, encoding="utf-8")
+            stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    else:
+        if "<!-- SESSION:" not in conversations:
+            (output_root / "filtered_conversations.EMPTY").write_text(conversations, encoding="utf-8")
+            print("WARNING: No sessions with messages found for %s" % date_str)
+        else:
+            conversations_path.write_text(conversations, encoding="utf-8")
+            stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        print("Date: %s" % date_str)
+        print("Sessions: claude_code=%s codex=%s" % (
+            stats["tools_used"]["claude_code"]["sessions"],
+            stats["tools_used"]["codex"]["sessions"],
+        ))
+        print("Output: %s" % conversations_path)
+        print("Stats: %s" % stats_path)
 
 
 if __name__ == "__main__":
