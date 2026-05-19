@@ -564,8 +564,12 @@ def main() -> None:
     conversations = build_markdown(date_str, sessions)
     stats = build_stats(date_str, sessions)
 
-    conversations_path.write_text(conversations, encoding="utf-8")
-    stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if "<!-- SESSION:" not in conversations:
+        (output_root / "filtered_conversations.EMPTY").write_text(conversations, encoding="utf-8")
+        print("WARNING: No sessions with messages found for %s" % date_str)
+    else:
+        conversations_path.write_text(conversations, encoding="utf-8")
+        stats_path.write_text(json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     print("Date: %s" % date_str)
     print("Sessions: claude_code=%s codex=%s" % (

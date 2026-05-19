@@ -71,14 +71,14 @@ def main() -> None:
     # Step 01: Extract
     step01_cmd = base_cmd + [str(SCRIPTS_DIR / "01_extract.py"), "--date", date_str,
                              "--output-dir", args.output_dir]
-    if not args.force and conversations_path.exists():
+    if not args.force and conversations_path.exists() and conversations_path.stat().st_size > 100:
         print("=== 01_extract === (skipped, output exists)")
     elif not run_step("01_extract", step01_cmd, args.dry_run):
         sys.exit(1)
 
     # Step 02: Session summarize
     step02_cmd = base_cmd + [str(SCRIPTS_DIR / "02_session_summarize.py"), "--date", date_str] + extra_args
-    if not args.force and session_summaries_path.exists():
+    if not args.force and session_summaries_path.exists() and session_summaries_path.stat().st_size > 100:
         print("=== 02_session_summarize === (skipped, output exists)")
     elif not run_step("02_session_summarize", step02_cmd, args.dry_run):
         sys.exit(1)
@@ -86,7 +86,7 @@ def main() -> None:
     # Step 03: Daily summarize
     step03_cmd = base_cmd + [str(SCRIPTS_DIR / "03_summarize.py"), "--date", date_str] + extra_args
     step03_cmd += ["--journal-root", args.journal_root]
-    if not args.force and journal_path.exists():
+    if not args.force and journal_path.exists() and journal_path.stat().st_size > 100:
         print("=== 03_summarize === (skipped, output exists)")
     elif not run_step("03_summarize", step03_cmd, args.dry_run):
         sys.exit(1)

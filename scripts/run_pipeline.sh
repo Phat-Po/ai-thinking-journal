@@ -34,8 +34,7 @@ PREVIOUS_MONTH="$(date -v-1d +%Y-%m 2>/dev/null || date -d yesterday +%Y-%m)"
   python3 scripts/04_daily_pipeline.py --date "$YESTERDAY"
   daily_status=$?
   if [ $daily_status -ne 0 ]; then
-    echo "ERROR: Daily pipeline failed (exit $daily_status)"
-    exit 1
+    echo "ERROR: Daily pipeline failed (exit $daily_status) — continuing to poster step"
   fi
 
   # Step 1b: Daily poster prompt (non-blocking — failure does not affect daily journal)
