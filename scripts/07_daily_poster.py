@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Task 07: Daily poster prompt generator.
+Task 07: Daily poster generator.
 
-Reads ai-journal/daily/YYYY-MM-DD.md, generates a manga-style worklog
-poster prompt via OpenAI API (following the journal-xhsposter skill rules),
-writes it to ai-journal/posters/YYYY-MM-DD-prompt.md, and pushes a copy
+Reads ai-journal/daily/YYYY-MM-DD.md, generates a poster prompt via OpenAI API,
+generates the poster image via OpenAI image API, writes prompt to
+ai-journal/posters/YYYY-MM-DD-prompt.md, and sends the recap text + image
 to the operator's Lark DM via lark-cli.
 
 Non-blocking: any failure logs a warning and exits 0 so the daily journal
@@ -26,6 +26,7 @@ from pathlib import Path
 
 TZ_LOCAL = timezone(timedelta(hours=8))
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_IMG_URL = "https://api.openai.com/v1/images/generations"
 DEFAULT_MODEL = "gpt-4.1"
 LARK_USER_ID = "ou_e645720e2176a5996263a9d81eeca06b"
 
@@ -34,50 +35,46 @@ SYSTEM_PROMPT = """You are a Xiaohongshu poster prompt writer for a personal AI-
 Convert the user's daily journal markdown into a ready-to-copy poster prompt block plus a Chinese narrative recap. Follow these rules strictly.
 
 ================================================================
-STYLE — MANGA / COMIC (default; do not deviate unless journal clearly demands otherwise)
+STYLE — FLAT ILLUSTRATION / INFOGRAPHIC (default; do not deviate unless journal clearly demands otherwise)
 ================================================================
 
-This is a XIAOHONGSHU FULL-COLOR comic cover, NOT a Japanese B&W print page. Think modern manhua / anime-cover illustration with comic-language overlays.
+This is a XIAOHONGSHU FULL-COLOR infographic-style cover. Think modern dashboard meets visual diary — bold geometric shapes, strong color blocks, high-contrast borders, clean iconography. NOT anime, NOT manga, NOT chibi.
 
 GLOBAL VISUAL TREATMENT (the whole page)
-- Vibrant full-color illustrated cover, bold flat color fills with cel/anime shading
+- Clean flat illustration with bold geometric shapes and strong color blocks
 - Rich saturated palette — pick a dominant hue family that matches the day's mood (e.g. warm orange/yellow for shipping momentum, cool blue/purple for late-night debugging, green/teal for steady maintenance, red/magenta for chaotic intensity). Name the palette explicitly.
-- One or two accent colors used for energy pops (highlights on screens, sound effects, action arrows)
-- Glossy, mobile-thumbnail readable — punchy contrast, clean backgrounds, NOT muted or washed out
-- Light cel-shading gradients, optional soft halftone dots used ONLY as decorative texture on backgrounds (never as the primary shading method)
+- One or two accent colors used for energy pops (highlights on data callouts, progress indicators, action arrows)
+- Deep saturated background with bright accent foreground elements
+- Panel borders: 3-4px dark strokes for thumbnail readability
+- Mobile-thumbnail readable — punchy contrast, clean backgrounds, NOT muted or washed out
 
-MASCOT / MINI-CHARACTER TREATMENT (the small chibi figures only)
-- Mascots are drawn as chibi or semi-chibi manga characters with HIGH-CONTRAST BLACK-INK outlines (this is the only place black ink dominates — it makes the small figures pop against the full-color background)
-- Expressive faces, big eyes, exaggerated reactions, bold inked linework
-- Filled with bright flat color inside the inked outline (NOT B&W)
-- Reaction symbols around them: sweat drop = stress, lightbulb = idea, vein-pop = frustration, sparkles = win, "?" = confusion, zzz = idle
-
-COMIC LANGUAGE OVERLAYS (used across the page)
-- Diagonal speed lines, motion lines, action lines radiating from focal points (in accent color or white)
-- Impact stars, sparkle marks, reaction badges (small inked cut-ins)
-- Onomatopoeia (拟声词) as bold typography embedded in the scene — e.g. ピカッ、ガタッ、ドン、シーン、コトッ — pick 1–2 that match the panel's emotion, rendered in large stylized katakana
-- Panel borders with visible gutters when using a multi-panel layout — gutters can be white or a contrasting solid color
-- Slightly tilted dynamic camera angles, foreground/midground/background depth
+ICON / PANEL TREATMENT
+- Each project or data point gets its own distinct bordered panel with a unique accent color
+- Use flat icons (wrench, gear, chart, document, microphone, etc.) as visual anchors — NOT characters
+- Data callouts: bold numbers, progress bars, checkmark rows, comparison arrows (→)
+- Badges: rounded rectangles with solid fills, dark stroke borders, clean sans-serif text
+- Warning/blocker indicators: red accent borders, X marks, warning triangle icons
 
 AVOID
-- Whole-page B&W or grayscale (the cover is full color — only mascot outlines are black-ink)
+- Chibi mascots, anime characters, kawaii aesthetics, big eyes, exaggerated expressions
+- Speed lines, manga screentones, comic reaction symbols, onomatopoeia (拟声词)
 - Heavy crosshatching, ink splatter, paper-grain "printed page" feel
-- Generic flat vector / app-icon style, sterile emoji language
 - Cute kawaii pastel softness, photorealism
+- Generic corporate vector / sterile emoji language
 
 ================================================================
-LAYOUT — WORKLOG COVER (daily journal default)
+LAYOUT — INFOGRAPHIC WORKLOG COVER (daily journal default)
 ================================================================
 
 Compose ONE vertical cover (4:5 aspect, soft target) with these regions:
 
-- TOP STRIP: main title in Chinese (up to 12 chars) + small date label
-- CENTER PANEL (largest, ~50% of canvas): the day's work scene — a generic protagonist + the actual tools/projects mentioned in the journal, mood baked in
-- LEFT SIDE BADGE COLUMN: 1–3 small panels for solved problems, each with a label of 10–25 Chinese chars carrying the real problem name
-- RIGHT SIDE BADGE COLUMN: 1–3 small panels for blockers, each visual metaphor + label of 10–25 Chinese chars stating the real issue
-- BOTTOM STRIP: a bold action arrow → with next-plan label in Chinese (up to 20 chars), stating the actual next task
+- TOP STRIP: main title in bold sans-serif Chinese (up to 12 chars) + small date badge
+- CENTER PANEL (largest, ~50% of canvas): a 2x3 grid of icon panels, each showing one project as an infographic vignette with distinct accent color border
+- LEFT SIDE BADGE COLUMN: 1–3 small rounded-rect badges for solved problems, each with a flat icon + label of 10–25 Chinese chars
+- RIGHT SIDE BADGE COLUMN: 1–3 small rounded-rect badges for blockers, each with a warning icon + label of 10–25 Chinese chars stating the real issue
+- BOTTOM STRIP: a bold accent-color arrow → with next-plan label in Chinese (up to 20 chars), stating the actual next task
 
-Allow panel borders, speed lines crossing between panels, and one spot color accent unifying the page.
+Grid gutters use dark charcoal separators. Each panel has a unique accent color border for visual distinction.
 
 ================================================================
 CONTENT FIDELITY (MANDATORY — most important rule)
@@ -85,9 +82,9 @@ CONTENT FIDELITY (MANDATORY — most important rule)
 
 The operator does NOT read the source journal. The poster prompt + the recap section together must let them know what happened today.
 
-- Center panel description MUST embed 2–3 specific events from today's journal, as concrete scene narration. Use real project names, tool names, file names, error names freely — they belong in the scene description, not just in labels.
+- Center panel descriptions MUST embed 2–3 specific events from today's journal, as concrete data callouts. Use real project names, tool names, file names, error names freely — they belong in the panel description, not just in labels.
 - Each badge label MUST carry the actual problem/solution name (e.g. "修复 VIBE Dashboard 启动卡死"，NOT "修复启动"). 10–25 Chinese chars per label.
-- Blocker badges: visual metaphor (locked gate, tangled wires, foggy maze) is allowed for the visual, but the label MUST state the real issue in plain Chinese — no metaphor-only labels.
+- Blocker badges: use warning icons (red border, X mark, caution triangle) paired with a label that states the real issue in plain Chinese — no metaphor-only labels.
 - Next-plan arrow label MUST state the concrete next action (e.g. "重写对话提取脚本支持 Codex"), not abstract phrasing.
 - Brand-free: no Wild Product Dept., no 野生俱乐部.
 
@@ -102,36 +99,39 @@ FIVE STORY BLOCKS (extract in this order)
 5. Next plan — the most important next concrete task
 
 ================================================================
-MASCOT FAMILY (pick 1–3, do not invent new ones)
+VISUAL ELEMENT FAMILY (pick icons, not mascots)
 ================================================================
 
-- Wrench — tools, fixes, things that worked
-- Bug — blockers, unresolved issues
-- Terminal `>_` — pipeline, automation, ongoing work
-- Progress gauge — momentum, things moving forward
-- Folder — projects, organization
+- Wrench icon — tools, fixes, things that worked
+- Warning triangle / X mark — blockers, unresolved issues
+- Terminal prompt `>_` — pipeline, automation, ongoing work
+- Progress bar / gauge — momentum, things moving forward
+- Folder icon — projects, organization
+- Checkmark circle — completed items
+- Document page — files, outputs, deliverables
+- Gear icon — configuration, settings, infrastructure
 
-For each chosen mascot, describe HOW it appears in manga form (chibi pose, reaction expression, accompanying symbol).
+For each chosen element, describe how it appears as a flat icon with accent color fill and dark stroke border.
 
 ================================================================
-MOOD → PALETTE / SOUND-EFFECT GUIDE
+MOOD → PALETTE GUIDE
 ================================================================
 
-- shipping momentum → warm orange/yellow palette, confident protagonist pose, sparkle marks, "ドン!" sound effect
-- debugging heavy → cool blue/purple palette, frustrated chibi with sweat drops, tangled wires, "ガーン" or "ヴァァ"
-- stuck-but-controlled → muted teal/grey palette, calm thinker pose, light-bulb half-lit, contemplation lines
-- chaotic cleanup → red/magenta palette, tornado swirl, paperwork flying, panicked but determined chibi
-- quiet maintenance → green/teal palette, soft "シーン" silence marker, low-key panels, steady gauge
+- shipping momentum → warm orange/yellow palette, bold data callouts, upward progress arrows
+- debugging heavy → cool blue/purple palette, tangled wire icons, warning markers
+- stuck-but-controlled → muted teal/grey palette, half-filled progress bars, contemplation icons
+- chaotic cleanup → red/magenta palette, scattered document icons, bold warning badges
+- quiet maintenance → green/teal palette, steady progress bars, checkmark rows
 
 ================================================================
 OUTPUT FORMAT (exact markdown, nothing else — no preamble, no closing remarks)
 ================================================================
 
 ### 推荐风格
-Manga / Comic — [add 1 sentence describing the specific manga sub-feel for today, including the chosen color palette: e.g. "shounen-style action cover, warm orange/yellow palette with red accent, dynamic shipping-momentum energy"]
+Flat Illustration / Infographic — [add 1 sentence describing the specific infographic feel for today, including the chosen color palette: e.g. "dashboard-style data visualization cover, warm orange/yellow palette with teal accent, bold shipping-momentum energy"]
 
-### 推荐 Mascot
-[1–3 mascots from the fixed family, comma separated, each followed by a short parenthetical describing its chibi pose / reaction symbol]
+### 推荐视觉元素
+[2-4 flat icons from the element family, comma separated, each followed by a short parenthetical describing its visual treatment — accent color, stroke style, accompanying data callout]
 
 ### 今日纪要
 For the operator to read directly. Plain Chinese bullets, 具体细节 over 抽象总结. Cover:
@@ -143,16 +143,15 @@ For the operator to read directly. Plain Chinese bullets, 具体细节 over 抽�
 ### 最终 Prompt
 [ONE long, richly-detailed copy-paste block for the image generator. Must include, in this order:
 
-  1. Opening style declaration — "Vibrant full-color manga / manhua cover illustration, vertical 4:5 aspect, anime cel-shading with bold flat colors, [palette description], [accent color] energy pops, chibi mascots with high-contrast black-ink outlines on a fully-colored background, glossy mobile-cover feel."
-  2. Top region — main title text in Chinese (quoted, up to 12 chars), with small date label
-  3. Center panel — full visual description of the day's work scene with 2–3 SPECIFIC events from the journal baked in as scene narration (real project names, tool names, files allowed inside the scene description). Protagonist (generic figure), environment, expression, speed lines, onomatopoeia, mood baked into the palette.
-  4. Left side badges — describe each solved-problem mini-panel: what icon, what reaction symbol, full 10–25 char Chinese label naming the real problem solved
-  5. Right side badges — describe each blocker mini-panel as a visual metaphor with appropriate reaction mark, paired with a 10–25 char Chinese label stating the real issue
-  6. Mascot placements — where each chosen mascot sits, its chibi pose with black-ink outline + flat color fill, its reaction symbol
-  7. Bottom region — bold accent-color arrow → with concrete next-plan text in Chinese (quoted, up to 20 chars)
-  8. Composition notes — tilt angles, focal point, depth layers, gutter style, palette unity
-  9. Typography notes — title font feel (bold comic display), label fonts (small handwritten/penned), onomatopoeia treatment (large stylized katakana in accent color)
-  10. Closing constraints — 4:5 vertical, brand-free, full-color (NOT B&W), no real-person faces, no internal task IDs visible, labels in Chinese
+  1. Opening style declaration — "Clean flat illustration / infographic cover, vertical 4:5 aspect, bold geometric shapes with strong color blocks, [palette description], [accent color] energy pops, high-contrast dark panel borders, no chibi characters, no anime cel-shading, mobile-thumbnail readable, modern dashboard aesthetic."
+  2. Top region — main title text in bold sans-serif Chinese (quoted, up to 12 chars), with small date badge
+  3. Center panel grid — describe each of the 2x3 panels as an infographic vignette with distinct accent color border, embedding 2–3 SPECIFIC events from the journal as data callouts (real project names, tool names, numbers). Use flat icons, bold numbers, progress indicators.
+  4. Left side badges — describe each solved-problem badge: what flat icon, accent color fill, full 10–25 char Chinese label naming the real problem solved
+  5. Right side badges — describe each blocker badge: warning icon (red border, X mark), paired with a 10–25 char Chinese label stating the real issue
+  6. Bottom region — bold accent-color arrow → with concrete next-plan text in Chinese (quoted, up to 20 chars)
+  7. Composition notes — grid layout, accent color assignments per panel, gutter style, background texture (faint terminal symbols), palette unity
+  8. Typography notes — title font (bold sans-serif, Inter/Helvetica Neue weight 700+), data numbers in large amber monospace, badge text in clean sans-serif
+  9. Closing constraints — 4:5 vertical, brand-free, full-color, no real-person faces, no internal task IDs visible, labels in Chinese, no chibi/anime elements, flat infographic style
 
 Write this as flowing English prose with embedded Chinese quoted text for titles/labels. Target 350–500 words. Be specific and visual, embed real journal content.]
 """
@@ -210,12 +209,57 @@ def call_openai(journal_text: str, date_str: str, model: str) -> str:
     return data["choices"][0]["message"]["content"].strip()
 
 
-def send_to_lark(prompt_text: str, date_str: str) -> bool:
+def call_openai_image(prompt: str, api_key: str, size: str = "1024x1280") -> bytes:
+    payload = json.dumps({
+        "model": "gpt-image-2",
+        "prompt": prompt,
+        "n": 1,
+        "size": size,
+        "quality": "medium",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        OPENAI_IMG_URL, data=payload,
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + api_key},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    import base64
+    return base64.b64decode(data["data"][0]["b64_json"])
+
+
+def extract_section(text: str, header: str) -> str:
+    """Extract content under a ### header until the next ### or end."""
+    marker = "### " + header
+    idx = text.find(marker)
+    if idx < 0:
+        return ""
+    start = idx + len(marker)
+    next_section = text.find("\n### ", start)
+    if next_section < 0:
+        return text[start:].strip()
+    return text[start:next_section].strip()
+
+
+def extract_recap(prompt_text: str) -> str:
+    """Extract the 今日纪要 section as the text to send to Lark."""
+    return extract_section(prompt_text, "今日纪要")
+
+
+def extract_final_prompt(prompt_text: str) -> str:
+    """Extract the 最终 Prompt section for image generation."""
+    return extract_section(prompt_text, "最终 Prompt")
+
+
+def send_to_lark(recap_text: str, date_str: str, image_path: str = None) -> bool:
     if not shutil.which("lark-cli"):
         warn("lark-cli not found in PATH; skipping Lark send.")
         return False
 
-    body = "**Daily poster prompt — %s**\n\n%s" % (date_str, prompt_text)
+    lark_env = dict(os.environ, LARK_CLI_NO_PROXY="1")
+
+    # Step 1: Send recap text
+    body = "**Daily thinking — %s**\n\n%s" % (date_str, recap_text)
     cmd = [
         "lark-cli", "im", "+messages-send",
         "--user-id", LARK_USER_ID,
@@ -223,24 +267,48 @@ def send_to_lark(prompt_text: str, date_str: str) -> bool:
         "--markdown", body,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=lark_env)
     except subprocess.TimeoutExpired:
-        warn("lark-cli send timed out after 60s")
+        warn("lark-cli text send timed out after 60s")
         return False
 
     if result.returncode != 0:
-        warn("lark-cli send failed (exit %d): %s" % (result.returncode, result.stderr.strip()))
+        warn("lark-cli text send failed (exit %d): %s" % (result.returncode, result.stderr.strip()))
         return False
 
+    text_ok = False
     try:
         resp = json.loads(result.stdout)
-        if not resp.get("ok"):
-            warn("lark-cli returned non-ok response: %s" % result.stdout.strip())
-            return False
+        text_ok = resp.get("ok", False)
+        if not text_ok:
+            warn("lark-cli returned non-ok: %s" % result.stdout.strip()[:200])
     except json.JSONDecodeError:
         warn("lark-cli output was not JSON: %s" % result.stdout.strip()[:200])
-        return False
-    return True
+
+    # Step 2: Send image if available
+    img_ok = False
+    if image_path and Path(image_path).exists():
+        cmd_img = [
+            "lark-cli", "im", "+messages-send",
+            "--user-id", LARK_USER_ID,
+            "--as", "user",
+            "--image", image_path,
+        ]
+        try:
+            result_img = subprocess.run(cmd_img, capture_output=True, text=True, timeout=120, env=lark_env)
+        except subprocess.TimeoutExpired:
+            warn("lark-cli image send timed out after 120s")
+        else:
+            if result_img.returncode == 0:
+                try:
+                    resp_img = json.loads(result_img.stdout)
+                    img_ok = resp_img.get("ok", False)
+                except json.JSONDecodeError:
+                    pass
+            if not img_ok:
+                warn("lark-cli image send failed: %s" % result_img.stderr.strip()[:200])
+
+    return text_ok
 
 
 def main() -> int:
@@ -250,15 +318,17 @@ def main() -> int:
     journal_path = Path(args.journal_root) / "daily" / ("%s.md" % date_str)
     posters_dir = Path(args.journal_root) / "posters"
     output_path = posters_dir / ("%s-prompt.md" % date_str)
+    image_path = posters_dir / ("%s-poster.png" % date_str)
 
     if not journal_path.exists():
         warn("Daily journal not found: %s (skipping poster step)" % journal_path)
         return 0
 
-    if output_path.exists() and not args.force:
-        print("Poster prompt already exists: %s (skipping)" % output_path)
+    if output_path.exists() and image_path.exists() and not args.force:
+        print("Poster prompt + image already exist: %s (skipping)" % output_path)
         return 0
 
+    # Step 1: Generate poster prompt via chat completion
     print("Reading daily journal: %s" % journal_path)
     try:
         journal_text = journal_path.read_text(encoding="utf-8")
@@ -276,6 +346,7 @@ def main() -> int:
         warn("Unexpected error during OpenAI call: %s" % exc)
         return 0
 
+    # Save prompt file
     posters_dir.mkdir(parents=True, exist_ok=True)
     try:
         output_path.write_text(prompt_text + "\n", encoding="utf-8")
@@ -284,12 +355,39 @@ def main() -> int:
         warn("Failed to write poster prompt: %s" % exc)
         return 0
 
+    # Step 2: Extract sections
+    recap_text = extract_recap(prompt_text)
+    final_prompt = extract_final_prompt(prompt_text)
+
+    if not recap_text:
+        warn("Could not extract 今日纪要 from prompt; using full prompt as recap")
+        recap_text = prompt_text
+
+    # Step 3: Generate image via OpenAI image API
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not final_prompt:
+        warn("Could not extract 最终 Prompt; skipping image generation")
+    elif not api_key:
+        warn("OPENAI_API_KEY not set; skipping image generation")
+    elif not image_path.exists() or args.force:
+        print("Generating poster image via OpenAI...")
+        try:
+            img_bytes = call_openai_image(final_prompt, api_key)
+            image_path.write_bytes(img_bytes)
+            print("Saved poster image: %s (%d KB)" % (image_path, len(img_bytes) // 1024))
+        except Exception as exc:
+            warn("Image generation failed: %s (non-blocking)" % exc)
+    else:
+        print("Poster image already exists: %s" % image_path)
+
+    # Step 4: Send recap text + image to Lark
     if args.skip_lark:
         print("Lark send skipped (--skip-lark).")
         return 0
 
+    img_file = str(image_path) if image_path.exists() else None
     print("Sending to Lark DM (user_id=%s)..." % LARK_USER_ID)
-    if send_to_lark(prompt_text, date_str):
+    if send_to_lark(recap_text, date_str, img_file):
         print("Lark send: OK")
     else:
         print("Lark send: failed (non-blocking, prompt file still saved)")

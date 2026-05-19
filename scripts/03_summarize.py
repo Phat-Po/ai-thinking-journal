@@ -2,7 +2,8 @@
 """
 Task 03: Daily thinking journal summarization.
 
-Consumes output/YYYY-MM-DD/session_summaries.md + stats.json and writes
+Consumes output/YYYY-MM-DD/session_summaries.md (legacy) OR
+signal_conversations.md (--signal-only) + stats.json and writes
 ai-journal/daily/YYYY-MM-DD.md.
 """
 
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=str(Path(__file__).parent.parent / "output"))
     parser.add_argument("--journal-root",
                         default=os.getenv("AI_JOURNAL_ROOT", str(Path(__file__).parent.parent / "ai-journal")))
+    parser.add_argument("--signal-only", action="store_true",
+                        help="Read signal_conversations.md instead of session_summaries.md.")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt only.")
     return parser.parse_args()
 
@@ -158,6 +161,71 @@ keep 2-4 bullets each. Stay casual and specific.
 """ % (json.dumps(stats, ensure_ascii=False, indent=2), summaries)
 
 
+def build_prompt_signal(signal_data: str, stats: Dict[str, Any]) -> str:
+    return """You are writing a personal thinking journal for a solo entrepreneur who builds
+e-commerce businesses and AI automation tools.
+
+Write as if the person is journaling for themselves — casual, specific, honest.
+Not a corporate report. Use first person ("我") when natural.
+Avoid phrases like "有效提升" "系統性排查" "形成可復用的知識庫" — nobody talks like that in a diary.
+
+Given:
+1. Signal data from today's AI conversations (between <signal> tags) — grouped by project, each session has a Recap (what the AI did) and the user's last Prompt
+2. Tool usage statistics (between <stats> tags)
+
+Produce a daily thinking journal entry.
+
+<rules>
+- Write in the SAME LANGUAGE as the dominant language in the signal data
+- Each bullet: one sentence max, concrete and specific
+- Extract REAL decisions and todos — never invent
+- If a section has nothing: write "無"
+- Do NOT output YAML frontmatter or the date title — those are handled separately
+- `available_skills` and `available_plugins` are environment inventory only.
+  They do NOT mean those skills/plugins were used today.
+- Focus on what the USER was thinking about and deciding, not just what the AI did
+- The Recap tells you what happened; the Prompt tells you what the user cared about
+</rules>
+
+<section_guide>
+## 今日主題
+1-2 sentences. What occupied most of the day? Write like telling a friend.
+
+## 關鍵決策
+Each bullet: what was decided + WHY (the tradeoff, the constraint, the trigger).
+BAD: "決定使用本地 Ollama 模型替代 Anthropic 雲端 API 來生成每日思考摘要"
+GOOD: "改用本地 Ollama 跑摘要，主要是 Claude API 一天跑一次太貴了，而且離線也能用"
+
+## 待辦事項
+Concrete, actionable items that can go straight into a todo list. Include file names or specific steps.
+BAD: "繼續開發並完善每日思考摘要的第二階段總結引擎，支持批量歷史數據提取與多數據源整合"
+GOOD: "把 02_session_summarize.py 的 prompt 改成中文優先" "測試 launchd plist 能不能在睡眠狀態喚醒"
+
+## 思考亮點
+Real insights: why something was decided, what was surprising, what was learned.
+Capture the REASONING, not the action.
+BAD: "透過分階段設計與嚴謹的數據過濾策略，有效降低每日摘要的資料噪音"
+GOOD: "發現 Codex 每次開 session 都把整份 AGENTS.md 塞進去，過濾掉之後資料量直接少了 81%%"
+
+## 工具使用觀察
+Note patterns in HOW different tools were used (exploration vs execution,
+which tool for which type of thinking), NOT just list what tools were called.
+
+## 原始對話索引
+Re-organize signal data by project, merge sessions that belong to the same project,
+keep 2-4 bullets each. Stay casual and specific.
+</section_guide>
+
+<stats>
+%s
+</stats>
+
+<signal>
+%s
+</signal>
+""" % (json.dumps(stats, ensure_ascii=False, indent=2), signal_data)
+
+
 def call_ollama(prompt: str, model: str) -> str:
     payload = json.dumps({
         "model": model,
@@ -213,16 +281,26 @@ def main() -> None:
         model = os.getenv("SUMMARY_MODEL", DEFAULT_OLLAMA_MODEL)
 
     extraction_dir = Path(args.output_dir) / date_str
-    summaries_path = extraction_dir / "session_summaries.md"
     stats_path = extraction_dir / "stats.json"
-    if not summaries_path.exists() or not stats_path.exists():
-        print("Error: artifacts not found for %s" % date_str, file=sys.stderr)
-        print("Run 01_extract.py then 02_session_summarize.py --date %s first." % date_str, file=sys.stderr)
-        sys.exit(1)
 
-    summaries = summaries_path.read_text(encoding="utf-8")
-    stats = json.loads(stats_path.read_text(encoding="utf-8"))
-    prompt = build_prompt(summaries, stats)
+    if args.signal_only:
+        signal_path = extraction_dir / "signal_conversations.md"
+        if not signal_path.exists() or not stats_path.exists():
+            print("Error: signal artifacts not found for %s" % date_str, file=sys.stderr)
+            print("Run 01_extract.py --signal-only --date %s first." % date_str, file=sys.stderr)
+            sys.exit(1)
+        signal_data = signal_path.read_text(encoding="utf-8")
+        stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        prompt = build_prompt_signal(signal_data, stats)
+    else:
+        summaries_path = extraction_dir / "session_summaries.md"
+        if not summaries_path.exists() or not stats_path.exists():
+            print("Error: artifacts not found for %s" % date_str, file=sys.stderr)
+            print("Run 01_extract.py then 02_session_summarize.py --date %s first." % date_str, file=sys.stderr)
+            sys.exit(1)
+        summaries = summaries_path.read_text(encoding="utf-8")
+        stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        prompt = build_prompt(summaries, stats)
 
     if args.dry_run:
         print(prompt)

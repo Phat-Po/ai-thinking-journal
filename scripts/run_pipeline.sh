@@ -31,7 +31,7 @@ PREVIOUS_MONTH="$(date -v-1d +%Y-%m 2>/dev/null || date -d yesterday +%Y-%m)"
 
   # Step 1: Daily pipeline (always summarize the completed previous day)
   echo "--- Daily pipeline ($YESTERDAY) ---"
-  python3 scripts/04_daily_pipeline.py --date "$YESTERDAY"
+  python3 scripts/04_daily_pipeline.py --date "$YESTERDAY" --signal-only
   daily_status=$?
   if [ $daily_status -ne 0 ]; then
     echo "ERROR: Daily pipeline failed (exit $daily_status) — continuing to poster step"

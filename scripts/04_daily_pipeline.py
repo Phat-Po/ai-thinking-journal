@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=str(Path(__file__).parent.parent / "output"))
     parser.add_argument("--journal-root", default=os.getenv("AI_JOURNAL_ROOT", str(Path(__file__).parent.parent / "ai-journal")))
     parser.add_argument("--force", action="store_true", help="Re-run even if output exists.")
+    parser.add_argument("--signal-only", action="store_true",
+                        help="Use --signal-only extraction (skip Step 02, Step 03 reads signal data).")
     parser.add_argument("--dry-run", action="store_true", help="Print what would run.")
     return parser.parse_args()
 
@@ -56,6 +58,7 @@ def main() -> None:
     date_str = target_date(args.date)
     output_dir = Path(args.output_dir) / date_str
 
+    signal_path = output_dir / "signal_conversations.md"
     conversations_path = output_dir / "filtered_conversations.md"
     session_summaries_path = output_dir / "session_summaries.md"
     journal_path = Path(args.journal_root) / "daily" / ("%s.md" % date_str)
@@ -71,21 +74,29 @@ def main() -> None:
     # Step 01: Extract
     step01_cmd = base_cmd + [str(SCRIPTS_DIR / "01_extract.py"), "--date", date_str,
                              "--output-dir", args.output_dir]
-    if not args.force and conversations_path.exists() and conversations_path.stat().st_size > 100:
+    if args.signal_only:
+        step01_cmd.append("--signal-only")
+    check_path = signal_path if args.signal_only else conversations_path
+    if not args.force and check_path.exists() and check_path.stat().st_size > 100:
         print("=== 01_extract === (skipped, output exists)")
     elif not run_step("01_extract", step01_cmd, args.dry_run):
         sys.exit(1)
 
-    # Step 02: Session summarize
-    step02_cmd = base_cmd + [str(SCRIPTS_DIR / "02_session_summarize.py"), "--date", date_str] + extra_args
-    if not args.force and session_summaries_path.exists() and session_summaries_path.stat().st_size > 100:
-        print("=== 02_session_summarize === (skipped, output exists)")
-    elif not run_step("02_session_summarize", step02_cmd, args.dry_run):
-        sys.exit(1)
+    # Step 02: Session summarize (skipped in signal-only mode)
+    if args.signal_only:
+        print("=== 02_session_summarize === (skipped, signal-only mode)")
+    else:
+        step02_cmd = base_cmd + [str(SCRIPTS_DIR / "02_session_summarize.py"), "--date", date_str] + extra_args
+        if not args.force and session_summaries_path.exists() and session_summaries_path.stat().st_size > 100:
+            print("=== 02_session_summarize === (skipped, output exists)")
+        elif not run_step("02_session_summarize", step02_cmd, args.dry_run):
+            sys.exit(1)
 
     # Step 03: Daily summarize
     step03_cmd = base_cmd + [str(SCRIPTS_DIR / "03_summarize.py"), "--date", date_str] + extra_args
     step03_cmd += ["--journal-root", args.journal_root]
+    if args.signal_only:
+        step03_cmd.append("--signal-only")
     if not args.force and journal_path.exists() and journal_path.stat().st_size > 100:
         print("=== 03_summarize === (skipped, output exists)")
     elif not run_step("03_summarize", step03_cmd, args.dry_run):

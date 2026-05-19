@@ -100,23 +100,35 @@ Read the source journal markdown and extract these five story blocks:
 
 ---
 
+## Visual Style
+
+Default style: **Flat Illustration / Infographic**
+
+- Bold geometric shapes, strong color blocks, high contrast borders
+- Deep saturated backgrounds with bright accent color pops
+- Panel borders: 3-4px dark strokes for thumbnail readability
+- Clean iconography: flat icons, progress bars, gauges, data callouts
+- Typography: bold sans-serif for titles, clean labels for data points
+- No chibi mascots, no anime cel-shading, no kawaii aesthetics
+- No speed lines, no manga screentones, no comic reaction symbols
+- Think: infographic dashboard meets visual diary, not anime magazine cover
+
+Only use `Manga / Comic` style when the operator explicitly requests it.
+
 ## Visual Translation Rules
 
 Prefer pictures over text. Use:
 
-- manga panels
-- badges
-- stamps
-- progress gauges
-- folders
-- warning signs
-- checkmarks
-- arrows
-- maps
-- desks
-- dashboards
-- comic reaction symbols
+- icon panels with bold borders
+- badges and stamps
+- progress bars and gauges
+- data callouts with numbers
+- folders and file icons
+- warning signs and checkmarks
+- arrows and flow indicators
+- maps and dashboards
 - before / after contrast
+- geometric shapes as visual metaphors
 
 Avoid:
 
@@ -125,7 +137,7 @@ Avoid:
 - internal-only codes
 - task IDs that outside readers cannot understand
 - fake screenshots
-- corporate vector UI style
+- chibi mascots or anime-style characters
 - overexplaining the journal
 
 ## Text Budget
