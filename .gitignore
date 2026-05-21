@@ -1,6 +1,11 @@
 .env
+.env.*
 *.pyc
 __pycache__/
 .DS_Store
 output/
 logs/
+data/
+*.db
+.venv/
+tasks/
