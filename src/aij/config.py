@@ -50,7 +50,7 @@ def _defaults() -> Dict[str, Any]:
             "openai": {
                 "model": "gpt-4.1-mini",
                 "poster_model": "gpt-4.1",
-                "image_model": "gpt-image-1",
+                "image_model": "gpt-image-2",
             },
             "anthropic": {
                 "model": "claude-sonnet-4-20250514",

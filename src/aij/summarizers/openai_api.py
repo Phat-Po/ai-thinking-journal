@@ -20,7 +20,7 @@ class OpenAISummarizer(SummarizerPlugin):
     display_name = "OpenAI API"
 
     def __init__(self, model: str = "gpt-4.1-mini", poster_model: str = "gpt-4.1",
-                 image_model: str = "gpt-image-1"):
+                 image_model: str = "gpt-image-2"):
         self.model = model
         self.poster_model = poster_model
         self.image_model = image_model

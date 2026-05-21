@@ -7,11 +7,15 @@ from typing import Optional
 from aij.summarizers.base import SummarizerPlugin
 from aij.summarizers.openai_api import OpenAISummarizer
 from aij.summarizers.ollama import OllamaSummarizer
+from aij.summarizers.anthropic_api import AnthropicSummarizer
+from aij.summarizers.claude_cli import ClaudeCliSummarizer
 
 
 _REGISTRY = {
     "openai": OpenAISummarizer,
     "ollama": OllamaSummarizer,
+    "anthropic": AnthropicSummarizer,
+    "claude_cli": ClaudeCliSummarizer,
 }
 
 

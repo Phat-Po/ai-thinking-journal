@@ -213,7 +213,42 @@ def init(config_path: str | None) -> None:
     poster = click.confirm("Step 5: Generate daily poster image? (requires OpenAI API)", default=False)
     config["poster"]["enabled"] = poster
 
-    # Step 6: Save
+    # Step 6: Output destinations
+    click.echo("")
+    click.echo("Step 6: Output destinations")
+    click.echo("  Local Markdown is always enabled.")
+    config["outputs"]["terminal"]["enabled"] = click.confirm("  Enable terminal display?", default=False)
+    config["outputs"]["lark_webhook"]["enabled"] = click.confirm("  Enable Lark webhook (group notifications)?", default=False)
+    config["outputs"]["lark_app"]["enabled"] = click.confirm("  Enable Lark custom app (DM + images)?", default=False)
+    config["outputs"]["email"]["enabled"] = click.confirm("  Enable email delivery?", default=False)
+
+    # Step 7: Conditional output config
+    click.echo("")
+    if config["outputs"]["lark_webhook"]["enabled"]:
+        click.echo("Step 7a: Lark Webhook configuration")
+        webhook_url = click.prompt("  Webhook URL", default="")
+        if webhook_url:
+            config["outputs"]["lark_webhook"]["webhook_url"] = webhook_url
+
+    if config["outputs"]["lark_app"]["enabled"]:
+        click.echo("Step 7b: Lark App configuration")
+        app_id = click.prompt("  App ID", default="")
+        if app_id:
+            config["outputs"]["lark_app"]["app_id"] = app_id
+        click.echo("  App secret should be set via env: LARK_APP_SECRET")
+        user_id = click.prompt("  Recipient open_id (for DM)", default="")
+        if user_id:
+            config["outputs"]["lark_app"]["user_id"] = user_id
+
+    if config["outputs"]["email"]["enabled"]:
+        click.echo("Step 7c: Email SMTP configuration")
+        config["outputs"]["email"]["smtp_host"] = click.prompt("  SMTP host", default="smtp.gmail.com")
+        config["outputs"]["email"]["smtp_port"] = click.prompt("  SMTP port", default=587, type=int)
+        config["outputs"]["email"]["from_addr"] = click.prompt("  From address", default="")
+        config["outputs"]["email"]["to_addr"] = click.prompt("  To address", default="")
+        click.echo("  Password should be set via env: AIJ_EMAIL_PASSWORD")
+
+    # Step 8: Save
     click.echo("")
     cfg_path = Path(config_path) if config_path else CONFIG_PATH
     save_config(config, cfg_path)

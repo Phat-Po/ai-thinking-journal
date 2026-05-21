@@ -7,11 +7,17 @@ from typing import List
 from aij.outputs.base import OutputPlugin
 from aij.outputs.markdown_file import MarkdownFileOutput
 from aij.outputs.terminal import TerminalOutput
+from aij.outputs.lark_webhook import LarkWebhookOutput
+from aij.outputs.lark_app import LarkAppOutput
+from aij.outputs.email_smtp import EmailOutput
 
 
 _REGISTRY = {
     "markdown": MarkdownFileOutput,
     "terminal": TerminalOutput,
+    "lark_webhook": LarkWebhookOutput,
+    "lark_app": LarkAppOutput,
+    "email": EmailOutput,
 }
 
 

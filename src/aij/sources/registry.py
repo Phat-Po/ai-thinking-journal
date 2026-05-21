@@ -7,11 +7,15 @@ from typing import Dict, List, Optional
 from aij.sources.base import SourcePlugin
 from aij.sources.claude_code import ClaudeCodeSource
 from aij.sources.codex_cli import CodexCliSource
+from aij.sources.cursor import CursorSource
+from aij.sources.windsurf import WindsurfSource
 
 
 _REGISTRY: Dict[str, type] = {
     "claude_code": ClaudeCodeSource,
     "codex_cli": CodexCliSource,
+    "cursor": CursorSource,
+    "windsurf": WindsurfSource,
 }
 
 

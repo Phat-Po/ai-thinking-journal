@@ -58,3 +58,10 @@
 | 2026-05-22 | Fixed: image model → gpt-image-1, Lark identity → --as bot |
 | 2026-05-22 | Phase 2 handoff written: tasks/HANDOFF-phase2-multi-source-output.md |
 | 2026-05-22 | Next: Phase 2 — Cursor/Windsurf sources, Anthropic/Claude CLI summarizers, Lark/email outputs |
+| 2026-05-22 | Phase 2 code complete — 7 new plugins, 5 modified files, all uncommitted |
+| 2026-05-22 | New: cursor.py, windsurf.py, anthropic_api.py, claude_cli.py, lark_webhook.py, lark_app.py, email_smtp.py |
+| 2026-05-22 | Modified: 3 registries, pipeline.py (dynamic sources), cli.py (expanded init wizard) |
+| 2026-05-22 | Verified: aij status ✓, aij run --dry-run ✓, config set/get ✓ |
+| 2026-05-22 | Operator correction: image model must be gpt-image-2, NOT gpt-image-1 |
+| 2026-05-22 | CRITICAL: two fixes before commit — (1) image model → gpt-image-2 in config.py + openai_api.py, (2) reset lark_webhook.enabled to false |
+| 2026-05-22 | Next: fix image model, commit, then integration test (real aij run) |

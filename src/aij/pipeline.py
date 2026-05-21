@@ -32,25 +32,27 @@ def sort_sessions(sessions: List[SessionData]) -> List[SessionData]:
 
 
 def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
+    # Collect all unique source names from sessions
+    source_names = sorted(set(s.source for s in sessions))
+
+    tools_used: Dict[str, Any] = {}
+    for source in source_names:
+        entry: Dict[str, Any] = {"sessions": 0, "messages": {"user": 0, "assistant": 0}, "tools": {}}
+        if source == "codex":
+            entry["available_skills"] = []
+            entry["available_plugins"] = []
+        tools_used[source] = entry
+
     stats: Dict[str, Any] = {
         "date": date_str,
-        "tools_used": {
-            "claude_code": {"sessions": 0, "messages": {"user": 0, "assistant": 0}, "tools": {}},
-            "codex": {
-                "sessions": 0,
-                "messages": {"user": 0, "assistant": 0},
-                "tools": {},
-                "available_skills": [],
-                "available_plugins": [],
-            },
-        },
+        "tools_used": tools_used,
         "projects_touched": [],
         "total_duration_estimate_min": 0,
     }
 
     project_sessions: Dict[Tuple[str, str], set] = defaultdict(set)
 
-    for source in ("claude_code", "codex"):
+    for source in source_names:
         source_sessions = [s for s in sessions if s.source == source]
         stats["tools_used"][source]["sessions"] = len(source_sessions)
 
@@ -176,11 +178,11 @@ def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -
     start, end = day_bounds(date_str, tz)
 
     # Step 1: Extract from all enabled sources
-    from aij.sources.registry import get_source
+    from aij.sources.registry import get_source, list_source_names
 
     sessions: List[SessionData] = []
     sources_config = config.get("sources", {})
-    for source_name in ("claude_code", "codex_cli"):
+    for source_name in list_source_names():
         source_cfg = sources_config.get(source_name, {})
         if not source_cfg.get("enabled", True):
             continue
