@@ -52,3 +52,9 @@
 | 2026-05-15 | Added `away_summaries` extraction in 01_extract.py — captures Claude's system recap messages |
 | 2026-05-15 | Added `journal-xhsposter` skill + `POSTER_WORKFLOW.md` for visual journal poster generation |
 | 2026-05-15 | Generated W18/W19 manga-style poster covers |
+| 2026-05-22 | Phase 1 complete — aij productized as pip package (commit 61eb088) |
+| 2026-05-22 | 29 files, 2058 lines: plugin ABCs, source/summarizer/output plugins, CLI, config, pipeline |
+| 2026-05-22 | Verified: `aij run --date 2026-05-17` produces correct output matching existing format |
+| 2026-05-22 | Fixed: image model → gpt-image-1, Lark identity → --as bot |
+| 2026-05-22 | Phase 2 handoff written: tasks/HANDOFF-phase2-multi-source-output.md |
+| 2026-05-22 | Next: Phase 2 — Cursor/Windsurf sources, Anthropic/Claude CLI summarizers, Lark/email outputs |
