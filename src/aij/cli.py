@@ -179,13 +179,14 @@ def init(config_path: str | None) -> None:
 
     # Step 1: Detect sources
     click.echo("Step 1: Detecting AI tool sources...")
-    from aij.sources.registry import discover_sources
-    for source in discover_sources():
+    from aij.sources.registry import _REGISTRY as source_registry
+    for reg_key, source_cls in source_registry.items():
+        source = source_cls()
         detected = source.detect()
         if detected:
             enabled = click.confirm("  Found %s at %s. Enable?" % (source.display_name, detected),
                                    default=True)
-            config["sources"][source.name]["enabled"] = enabled
+            config["sources"][reg_key]["enabled"] = enabled
         else:
             click.echo("  %s: not detected" % source.display_name)
 
