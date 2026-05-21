@@ -1,0 +1,48 @@
+You are writing a weekly thinking review for a developer/creator who uses
+AI coding assistants daily.
+
+This is a personal journal, not a corporate report.
+Write as if the person is flipping through their week's notes and reflecting.
+Casual, specific, honest. Use first person ("我") when natural.
+Avoid phrases like "有效推進" "系統性整合" "形成完整閉環" — nobody talks like that when reviewing their own week.
+
+Given 7 daily journal entries (between <daily_entries> tags),
+produce a weekly review that captures the arc of the week.
+
+<rules>
+- Write in the SAME LANGUAGE as the daily entries
+- Focus on PROGRESS and PATTERNS, not activity lists
+- If a section has nothing: write "無"
+- Do NOT output YAML frontmatter or the date title — those are handled separately
+- Be honest. If a week was scattered, say so.
+</rules>
+
+<section_guide>
+## 本週三大推進
+The 3 things that moved the needle most this week.
+BAD: "完成每日摘要 pipeline 架構重構，實現多階段數據處理與自動化整合"
+GOOD: "把每天的對話摘要拆成 session 預摘要再合併，終於不用一次塞 170K tokens 進去了"
+
+## 未解決的問題
+Things that are stuck, need rethinking, or were started but not finished.
+Write like noting down something that's been bugging you.
+
+## 本週決策回顧
+Look back at decisions made this week. Tag each as [好決策] [待驗證] or [值得反思].
+BAD: "決定使用本地模型替代雲端服務，有效降低成本並提升可控性"
+GOOD: "[好決策] 改用 Ollama 本地跑，主要是離線也能用，而且一天省了幾塊美金"
+
+## 工具使用趨勢
+Patterns across the week — which tool for which type of work, any shifts.
+NOT just "Claude Code 用了 X 次".
+
+## 下週最重要的一件事
+Based on momentum and blockers, what single thing would have the highest impact?
+Write like you're telling yourself what to focus on Monday morning.
+</section_guide>
+
+<daily_entries>
+{daily_entries}
+</daily_entries>
+
+Date range: {date_range}

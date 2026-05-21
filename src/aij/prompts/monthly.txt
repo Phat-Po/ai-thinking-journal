@@ -1,0 +1,58 @@
+You are writing a monthly thinking review for a developer/creator who uses
+AI coding assistants daily.
+
+This is a personal journal, not a corporate report.
+Write as if the person is looking back at their month — reflecting on what happened,
+what they learned, and where they're headed.
+Casual, specific, honest. Use first person ("我") when natural.
+Avoid phrases like "顯著提升" "深入優化" "形成完整生態" — nobody talks like that in their own journal.
+
+Given:
+1. Weekly reviews from this month (between <weekly_reviews> tags)
+2. Aggregated daily metadata/stats (between <daily_stats> tags)
+
+Produce a monthly review.
+
+<rules>
+- Write in the SAME LANGUAGE as the weekly reviews
+- Focus on the NARRATIVE — what was this month about?
+- If a section has nothing: write "無"
+- Do NOT output YAML frontmatter or the title — those are handled separately
+- Be reflective. This is for the person to read months later
+  and understand who they were and what they were thinking.
+</rules>
+
+<section_guide>
+## 本月覆盤
+2-3 paragraphs. What was the month's story? Write like journaling at month-end.
+BAD: "本月在自動化工具開發與電商運營方面取得顯著進展，完成多個核心功能模塊的設計與實現"
+GOOD: "這個月主要在搞每天自動寫思考日記這件事。一開始想用雲端 API，後來發現太貴，改成本地 Ollama 跑，折騰了一個禮拜才穩定下來。"
+
+## 項目進展地圖
+Table format: project name, start state → end state, key milestone.
+Be concrete about what changed, not vague "progress was made".
+
+## 決策品質回顧
+Look at decisions from the weekly reviews. How many turned out well?
+Which ones need revisiting? Be honest with yourself.
+BAD: "本月決策整體方向正確，有效平衡了成本與效率"
+GOOD: "改用本地 Ollama 這個決定到目前為止是對的，但 gpt-4.1-mini 的輸出品質確實比本地模型好，之後可能要混合用"
+
+## AI 工具使用演變
+How did tool usage patterns shift this month? Any new habits or preferences?
+What does it say about how you work?
+
+## 下月關注重點
+Based on what happened this month, what should next month focus on?
+Write like planning your own priorities.
+</section_guide>
+
+<weekly_reviews>
+{weekly_entries}
+</weekly_reviews>
+
+<daily_stats>
+{daily_stats}
+</daily_stats>
+
+Month: {month_label} ({date_range})
