@@ -28,7 +28,8 @@ class MarkdownFileOutput(OutputPlugin):
         output_path = subdir / filename
         content = entry.frontmatter + "\n" + entry.title + "\n\n" + entry.body + "\n"
         output_path.write_text(content, encoding="utf-8")
-        print("Output: %s" % output_path)
+        # Store path for pipeline to report
+        self._last_output_path = str(output_path)
         return True
 
     def configure(self, config: dict) -> None:

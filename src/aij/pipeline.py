@@ -168,8 +168,16 @@ def build_signal_markdown(date_str: str, sessions: List[SessionData], tz: ZoneIn
     return "\n".join(lines)
 
 
-def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -> JournalEntry | None:
-    """Run the daily pipeline for a given date. Returns JournalEntry or None."""
+def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False,
+              progress: Any = None) -> JournalEntry | None:
+    """Run the daily pipeline for a given date. Returns JournalEntry or None.
+
+    progress: optional callback(event: str, data: dict) for UI updates.
+    """
+    def _emit(event: str, data: dict = None) -> None:
+        if progress:
+            progress(event, data or {})
+
     tz_name = config["general"]["timezone"]
     tz = ZoneInfo(tz_name)
     output_dir = Path(config["general"]["output_dir"]).expanduser()
@@ -193,13 +201,30 @@ def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -
         detected = source.detect()
         if not detected:
             continue
+
+        # Collect sessions for this source
+        source_sessions = []
         for path in source.find_files(date_str):
             parsed = source.parse_file(path, start, end)
             if parsed:
-                sessions.append(parsed)
+                source_sessions.append(parsed)
+        sessions.extend(source_sessions)
+
+        # Count projects
+        projects = set(s.project_name for s in source_sessions)
+        warning = None
+        if source_name == "cursor" and not source_sessions:
+            warning = "DB schema unknown, skipped"
+
+        _emit("source_found", {
+            "name": source.display_name.split(" (")[0],
+            "sessions": len(source_sessions),
+            "projects": len(projects),
+            "warning": warning,
+        })
 
     if not sessions:
-        print("No sessions found for %s" % date_str)
+        _emit("no_sessions")
         return None
 
     # Step 2: Build stats and signal markdown
@@ -224,11 +249,9 @@ def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -
     ).replace("{stats}", json.dumps(stats, ensure_ascii=False, indent=2))
 
     if dry_run:
-        print("=== Dry Run ===")
-        print("Date: %s" % date_str)
-        print("Sessions: %d" % len(sessions))
-        print("Signal: %d chars" % len(signal_content))
-        print("Prompt: %d chars" % len(prompt))
+        print("  Sessions: %d" % len(sessions))
+        print("  Signal:   %d chars" % len(signal_content))
+        print("  Prompt:   %d chars" % len(prompt))
         return None
 
     # Step 4: Call summarizer
@@ -240,8 +263,10 @@ def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -
     if not summarizer:
         raise RuntimeError("Summarizer '%s' not available" % backend)
 
-    print("Backend: %s | Model: %s" % (backend, getattr(summarizer, "model", "?")))
+    model = getattr(summarizer, "model", "?")
+    _emit("summarizer_start", {"backend": backend, "model": model})
     summary = summarizer.call(prompt)
+    _emit("summarizer_done", {"words": len(summary.split())})
 
     # Step 5: Build journal entry
     frontmatter = build_frontmatter(date_str, stats)
@@ -260,6 +285,17 @@ def run_daily(date_str: str, config: Dict[str, Any], *, dry_run: bool = False) -
 
     outputs_config = config.get("outputs", {})
     for output in get_enabled_outputs(outputs_config):
-        output.deliver(entry)
+        try:
+            ok = output.deliver(entry)
+            if ok:
+                msg = output.display_name
+                # Show output path if available (markdown plugin)
+                if hasattr(output, "_last_output_path"):
+                    msg += " → " + output._last_output_path
+                _emit("output_ok", {"message": msg})
+            else:
+                _emit("output_skip", {"message": "%s — skipped" % output.display_name})
+        except Exception as exc:
+            _emit("output_skip", {"message": "%s — %s" % (output.display_name, exc)})
 
     return entry

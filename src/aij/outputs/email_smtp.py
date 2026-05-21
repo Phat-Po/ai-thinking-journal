@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import smtplib
-import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -24,10 +23,8 @@ class EmailOutput(OutputPlugin):
     def deliver(self, entry: JournalEntry) -> bool:
         password = os.getenv("AIJ_EMAIL_PASSWORD", "")
         if not password:
-            print("Warning: AIJ_EMAIL_PASSWORD not set", file=sys.stderr)
             return False
         if not self._from_addr or not self._to_addr:
-            print("Warning: email from_addr/to_addr not configured", file=sys.stderr)
             return False
 
         msg = MIMEMultipart("alternative")
@@ -68,11 +65,9 @@ class EmailOutput(OutputPlugin):
                 server.ehlo()
                 server.login(self._from_addr, password)
                 server.sendmail(self._from_addr, self._to_addr, msg.as_string())
-            print("Email: sent to %s" % self._to_addr)
             return True
         except Exception as exc:
-            print("Warning: email send failed: %s" % exc, file=sys.stderr)
-            return False
+            raise RuntimeError("Email send failed: %s" % exc)
 
     def configure(self, config: dict) -> None:
         if "smtp_host" in config:

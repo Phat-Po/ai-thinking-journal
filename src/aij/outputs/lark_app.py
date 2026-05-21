@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -90,16 +89,11 @@ class LarkAppOutput(OutputPlugin):
             },
             method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            if result.get("code", -1) != 0:
-                print("Warning: Lark send failed: %s" % result.get("msg", result), file=sys.stderr)
-                return False
-            return True
-        except Exception as exc:
-            print("Warning: Lark send failed: %s" % exc, file=sys.stderr)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        if result.get("code", -1) != 0:
             return False
+        return True
 
     def _upload_image(self, token: str, image_path: Path) -> Optional[str]:
         """Upload image to Lark, return image_key."""
@@ -136,27 +130,17 @@ class LarkAppOutput(OutputPlugin):
             },
             method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            if result.get("code", -1) != 0:
-                print("Warning: Lark image upload failed: %s" % result.get("msg", result), file=sys.stderr)
-                return None
-            return result.get("data", {}).get("image_key")
-        except Exception as exc:
-            print("Warning: Lark image upload failed: %s" % exc, file=sys.stderr)
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        if result.get("code", -1) != 0:
             return None
+        return result.get("data", {}).get("image_key")
 
     def deliver(self, entry: JournalEntry) -> bool:
         if not self._user_id:
-            print("Warning: lark_app user_id not configured", file=sys.stderr)
             return False
 
-        try:
-            token = self._get_tenant_token()
-        except RuntimeError as exc:
-            print("Warning: %s" % exc, file=sys.stderr)
-            return False
+        token = self._get_tenant_token()
 
         # Send text summary
         body_text = entry.body[:2000]
@@ -175,8 +159,6 @@ class LarkAppOutput(OutputPlugin):
                 img_content = json.dumps({"image_key": image_key})
                 self._send_message(token, "image", img_content)
 
-        if text_ok:
-            print("Lark app: DM sent to %s" % self._user_id[:12] + "...")
         return text_ok
 
     def configure(self, config: dict) -> None:
