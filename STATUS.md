@@ -65,3 +65,15 @@
 | 2026-05-22 | Operator correction: image model must be gpt-image-2, NOT gpt-image-1 |
 | 2026-05-22 | CRITICAL: two fixes before commit — (1) image model → gpt-image-2 in config.py + openai_api.py, (2) reset lark_webhook.enabled to false |
 | 2026-05-22 | Next: fix image model, commit, then integration test (real aij run) |
+| 2026-05-22 | Terminal UX overhaul — styled CLI output (commit 2c070c2) |
+| 2026-05-22 | New ui.py module: banner, summary_box, Spinner, styled helpers |
+| 2026-05-22 | aij init: 4-step wizard, auto-detect sources, confirmation box |
+| 2026-05-22 | aij run: progress callbacks, source counts, delivery summary, last_run.json |
+| 2026-05-22 | aij status: aligned columns, color-coded, last run display |
+| 2026-05-22 | All output plugins: removed direct print(), pipeline handles display |
+| 2026-05-22 | Operator feedback: 4 init wizard improvements needed (see handoff) |
+| 2026-05-22 | (1) "Set up now or later?" for Lark/Email outputs |
+| 2026-05-22 | (2) "Go back and modify" when declining save |
+| 2026-05-22 | (3) "Run journal now?" after save |
+| 2026-05-22 | (4) API key onboarding for first-time users |
+| 2026-05-22 | Handoff: tasks/HANDOFF-init-ux-improvements.md |
