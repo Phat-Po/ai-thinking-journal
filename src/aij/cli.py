@@ -17,7 +17,24 @@ from aij import __version__
 @click.version_option(version=__version__, prog_name="aij")
 def main() -> None:
     """Automated daily thinking journal from AI coding assistant conversations."""
-    pass
+    _load_dotenv()
+
+
+def _load_dotenv() -> None:
+    """Load ~/.aij/.env into os.environ (won't overwrite existing vars)."""
+    import os
+    env_path = Path.home() / ".aij" / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 # ── run ─────────────────────────────────────────────────────────────────
@@ -274,7 +291,7 @@ def init(config_path: str | None) -> None:
     from aij.config import load_config, save_config, CONFIG_PATH
     from aij.sources.registry import _REGISTRY as source_registry
     from aij.summarizers.registry import list_summarizer_names
-    from aij.ui import banner, success, warn, info, step, summary_box, CHECK, DOT
+    from aij.ui import banner, success, warn, info, step, summary_box, arrow
 
     config = load_config()
 
@@ -298,63 +315,253 @@ def init(config_path: str | None) -> None:
         warn("No AI tool sources detected")
     click.echo()
 
-    # ── Step 1/4: LLM backend ──
-    step(1, 4, "LLM backend")
-    backends = list_summarizer_names()
-    backend = click.prompt("  Backend", type=click.Choice(backends), default="openai")
-    config["summarizer"]["backend"] = backend
-    click.echo()
+    while True:
+        # ── Step 1/4: LLM backend ──
+        step(1, 4, "LLM backend")
+        backends = list_summarizer_names()
+        backend = click.prompt("  Backend", type=click.Choice(backends), default="openai")
+        config["summarizer"]["backend"] = backend
 
-    # ── Step 2/4: Output destinations ──
-    step(2, 4, "Output destinations")
-    info("Local Markdown — always on")
-    config["outputs"]["terminal"]["enabled"] = click.confirm("  Terminal display?", default=False)
-    config["outputs"]["lark_webhook"]["enabled"] = click.confirm("  Lark group webhook?", default=False)
-    config["outputs"]["lark_app"]["enabled"] = click.confirm("  Lark app DM?", default=False)
-    config["outputs"]["email"]["enabled"] = click.confirm("  Email delivery?", default=False)
-    click.echo()
+        # Improvement 4: API key / backend availability check
+        _check_backend_available(backend)
+        click.echo()
 
-    # ── Step 3/4: Hints for enabled outputs ──
-    step(3, 4, "Configuration hints")
-    hints = []
-    if config["outputs"]["lark_webhook"]["enabled"]:
-        hints.append("Lark webhook: aij config set outputs.lark_webhook.webhook_url <url>")
-    if config["outputs"]["lark_app"]["enabled"]:
-        hints.append("Lark app: aij config set outputs.lark_app.app_id <id>")
-        hints.append("  env: export LARK_APP_SECRET=<secret>")
-    if config["outputs"]["email"]["enabled"]:
-        hints.append("Email: aij config set outputs.email.from_addr <addr>")
-        hints.append("  env: export AIJ_EMAIL_PASSWORD=<password>")
-    if hints:
-        for h in hints:
-            click.echo(click.style("  → ", fg="cyan") + h)
-    else:
-        info("No additional configuration needed")
-    click.echo()
+        # ── Step 2/4: Output destinations ──
+        step(2, 4, "Output destinations")
+        info("Local Markdown — always on")
+        config["outputs"]["terminal"]["enabled"] = click.confirm("  Terminal display?", default=False)
 
-    # ── Step 4/4: Confirm & save ──
-    step(4, 4, "Confirm & save")
+        # Improvement 1: "Set up now or later?" for configurable outputs
+        for output_key, label, fields in _OUTPUT_SETUP_FIELDS:
+            choice = _ask_output_setup(label)
+            if choice == "now":
+                config["outputs"][output_key]["enabled"] = True
+                _setup_output_now(config, output_key, fields)
+            elif choice == "later":
+                config["outputs"][output_key]["enabled"] = True
+                arrow("Enable later: aij config set outputs.%s.<field> <value>" % output_key)
+            else:
+                config["outputs"][output_key]["enabled"] = False
+        click.echo()
 
-    enabled_sources = [k for k in source_registry if config["sources"].get(k, {}).get("enabled")]
-    enabled_outputs = ["markdown"] + [k for k in config.get("outputs", {}) if config["outputs"][k].get("enabled") and k != "markdown"]
+        # ── Step 3/4: Confirm ──
+        step(3, 4, "Review")
 
-    summary_box([
-        ("Backend:", config["summarizer"]["backend"]),
-        ("Sources:", ", ".join(enabled_sources) if enabled_sources else "none"),
-        ("Outputs:", ", ".join(enabled_outputs)),
-        ("Timezone:", config["general"]["timezone"]),
-    ])
-    click.echo()
+        enabled_sources = [k for k in source_registry if config["sources"].get(k, {}).get("enabled")]
+        enabled_outputs = ["markdown"] + [k for k in config.get("outputs", {}) if config["outputs"][k].get("enabled") and k != "markdown"]
 
-    if not click.confirm("  Save this config?", default=True):
-        warn("Aborted — config not saved")
-        return
+        summary_box([
+            ("Backend:", config["summarizer"]["backend"]),
+            ("Sources:", ", ".join(enabled_sources) if enabled_sources else "none"),
+            ("Outputs:", ", ".join(enabled_outputs)),
+            ("Timezone:", config["general"]["timezone"]),
+        ])
+        click.echo()
 
+        # Improvement 2: allow going back
+        save_choice = click.prompt(
+            "  Save this config?",
+            type=click.Choice(["yes", "back"], case_sensitive=False),
+            default="yes",
+        )
+        if save_choice.lower() == "back":
+            click.echo()
+            info("Restarting wizard...")
+            click.echo()
+            config = load_config()
+            continue
+
+        break
+
+    # ── Step 4/4: Save ──
+    step(4, 4, "Save")
     cfg_path = Path(config_path) if config_path else CONFIG_PATH
     save_config(config, cfg_path)
     click.echo()
     success("Config saved to %s" % cfg_path)
-    click.echo(click.style("  → ", fg="cyan") + "Run 'aij run' to generate your first journal entry.")
+
+    # Improvement 3: offer to run journal now
+    click.echo()
+    if click.confirm("  Run a journal now?", default=True):
+        click.echo()
+        _run_journal_inline(config)
+
+
+def _check_backend_available(backend: str) -> None:
+    """Check if the selected backend's API key or service is available."""
+    import os
+    import shutil
+    from aij.config import CONFIG_DIR
+    from aij.ui import warn, success, arrow, info
+
+    checks = {
+        "openai": ("OPENAI_API_KEY", "env"),
+        "anthropic": ("ANTHROPIC_API_KEY", "env"),
+        "ollama": ("http://localhost:11434", "url"),
+        "claude_cli": ("claude", "path"),
+    }
+    check = checks.get(backend)
+    if not check:
+        return
+
+    name, kind = check
+    if kind == "env":
+        if os.getenv(name):
+            return
+        click.echo()
+        warn("%s not found in environment" % name)
+        click.echo()
+        choice = click.prompt(
+            "  What to do?",
+            type=click.Choice(["enter", "later", "quit"], case_sensitive=False),
+            default="enter",
+        )
+        choice = choice.lower()
+        if choice == "enter":
+            key_value = click.prompt("  Paste your %s" % name, hide_input=True)
+            if key_value.strip():
+                _save_env_key(name, key_value.strip())
+                os.environ[name] = key_value.strip()
+                success("Key saved to ~/.aij/.env and loaded for this session")
+            else:
+                warn("Empty value — skipped")
+        elif choice == "later":
+            arrow('Set it later: export %s="your-key-here"' % name)
+            arrow("Add to ~/.zshrc to persist across sessions.")
+        else:
+            raise SystemExit(0)
+    elif kind == "path":
+        if not shutil.which(name):
+            click.echo()
+            warn("'%s' not found in PATH" % name)
+            click.echo()
+            if not click.confirm("  Continue anyway?", default=False):
+                raise SystemExit(0)
+    elif kind == "url":
+        try:
+            import urllib.request
+            urllib.request.urlopen(name, timeout=3)
+        except Exception:
+            click.echo()
+            warn("Ollama not reachable at %s" % name)
+            click.echo()
+            if not click.confirm("  Continue anyway?", default=False):
+                raise SystemExit(0)
+
+
+def _save_env_key(key_name: str, key_value: str) -> None:
+    """Append or update a key in ~/.aij/.env (mode 600)."""
+    import os
+    from aij.config import CONFIG_DIR
+
+    env_path = CONFIG_DIR / ".env"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    lines = []
+    replaced = False
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith(key_name + "="):
+                lines.append('%s="%s"' % (key_name, key_value))
+                replaced = True
+            else:
+                lines.append(line)
+    if not replaced:
+        lines.append('%s="%s"' % (key_name, key_value))
+
+    env_path.write_text("\n".join(lines) + "\n")
+    os.chmod(env_path, 0o600)
+
+
+_OUTPUT_SETUP_FIELDS = [
+    ("lark_webhook", "Lark group webhook", [
+        ("webhook_url", "Webhook URL", "Create a bot in your Lark group settings to get the webhook URL"),
+    ]),
+    ("lark_app", "Lark app DM", [
+        ("app_id", "App ID", "Create a custom app at https://open.feishu.cn/app"),
+        ("app_secret", "App Secret (stored in config)", "Found in app credentials page"),
+        ("open_id", "Recipient open_id", "Use lark-cli contact +resolve <name> to find"),
+    ]),
+    ("email", "Email delivery", [
+        ("from_addr", "From address", "Your email address for sending"),
+        ("to_addr", "To address", "Recipient email address"),
+        ("smtp_host", "SMTP host", "e.g. smtp.gmail.com"),
+        ("smtp_port", "SMTP port", "e.g. 587"),
+    ]),
+]
+
+
+def _ask_output_setup(label: str) -> str:
+    """Ask user: now / later / skip for an output destination."""
+    click.echo()
+    choice = click.prompt(
+        "  %s" % label,
+        type=click.Choice(["now", "later", "skip"], case_sensitive=False),
+        default="skip",
+    )
+    return choice.lower()
+
+
+def _setup_output_now(config: dict, output_key: str, fields: list) -> None:
+    """Walk through each field for an output, prompting with guidance."""
+    from aij.ui import info, arrow
+    for field_key, prompt_text, help_text in fields:
+        info(help_text)
+        value = click.prompt("  %s (or 'skip')" % prompt_text, default="skip")
+        if value.lower() == "skip":
+            arrow("Skipped — set later: aij config set outputs.%s.%s <value>" % (output_key, field_key))
+            continue
+        config["outputs"][output_key][field_key] = value
+
+
+def _run_journal_inline(config: dict) -> None:
+    """Run the journal pipeline inline after init."""
+    from aij.date_utils import target_date, weekday_name
+    from aij.pipeline import run_daily
+    from aij.ui import banner, success, warn, error, info
+
+    tz_name = config["general"]["timezone"]
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(tz_name)
+
+    date_str = target_date(None, tz)
+    day_name = weekday_name(date_str)
+
+    banner("aij — First Run", "%s %s" % (date_str, day_name))
+    click.echo()
+
+    def on_progress(event: str, data: dict) -> None:
+        if event == "source_found":
+            name = data["name"]
+            sessions = data["sessions"]
+            projects = data["projects"]
+            if data.get("warning"):
+                warn("%s — %s" % (name, data["warning"]))
+            else:
+                success("%s — %d sessions, %d projects" % (name, sessions, projects))
+        elif event == "no_sessions":
+            error("No sessions found for %s" % date_str)
+        elif event == "summarizer_start":
+            click.echo()
+            info("Summarizing (%s / %s)..." % (data["backend"], data["model"]))
+        elif event == "summarizer_done":
+            words = data["words"]
+            click.echo(click.style("  ✓ ", fg="green") + "Summary generated (%d words)" % words)
+        elif event == "output_ok":
+            success("%s" % data["message"])
+        elif event == "output_skip":
+            warn("%s" % data["message"])
+
+    t0 = time.time()
+    entry = run_daily(date_str, config, progress=on_progress)
+    elapsed = time.time() - t0
+
+    click.echo()
+    if entry:
+        _save_last_run(date_str, config, entry)
+        banner("Done in %.0fs" % elapsed)
+    else:
+        error("No output generated for %s" % date_str)
 
 
 if __name__ == "__main__":
