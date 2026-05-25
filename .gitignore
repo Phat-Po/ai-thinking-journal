@@ -9,3 +9,10 @@ data/
 *.db
 .venv/
 tasks/
+
+# Personal artifacts (journal entries, posters, internal docs)
+ai-journal/
+HANDOFF.md
+INVESTIGATION.md
+STATUS.md
+skills/
