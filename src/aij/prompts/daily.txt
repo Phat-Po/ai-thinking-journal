@@ -21,13 +21,14 @@ Given:
 <format>
 Output exactly this structure:
 
-> [!summary] 今天
-> 2-3 sentences: what occupied the day, the most important decision, one thing learned.
+**今天** — 2-3 sentences: what occupied the day, the most important decision, one thing learned.
+
+**工具用量** — One line summarizing the stats: how many Claude Code sessions vs Codex sessions, total messages, total tools called. Example: "Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs"
 
 ### 项目时间线
 
 For each meaningful project (skip trivial one-off queries), write a short paragraph:
-- Start with the project name and which tool was used: "(via Claude Code)" or "(via Codex)"
+- Start with the project name and which tool was used: "(via Claude Code)" or "(via Codex)" — ALWAYS include this label
 - Include the time spent if available: "约 2 小时"
 - 1-3 sentences: what was done, why, what happened. Write like telling a friend, not a status report.
 - Merge multiple sessions of the same project into one entry
@@ -42,8 +43,9 @@ For each meaningful project (skip trivial one-off queries), write a short paragr
 </format>
 
 <example>
-> [!summary] 今天
-> 主力在搞日记自动化 pipeline，从提取到生成跑通了全流程。顺便把 VIBE Dashboard 46 个乱 commit squash 成 5 个。学到：prompt 没写清楚语气，输出就变公文。
+**今天** 主力在搞日记自动化 pipeline，从提取到生成跑通了全流程。顺便把 VIBE Dashboard 46 个乱 commit squash 成 5 个。学到：prompt 没写清楚语气，输出就变公文。
+
+**工具用量** Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs · 总计约 28h
 
 ### 项目时间线
 
