@@ -99,57 +99,72 @@ def build_frontmatter(date_str: str, stats: Dict[str, Any]) -> str:
 
 
 def build_prompt(summaries: str, stats: Dict[str, Any]) -> str:
-    return """You are writing a personal thinking journal for a solo entrepreneur who builds
-e-commerce businesses and AI automation tools.
+    return """You are writing a personal thinking journal for a solo developer/entrepreneur
+who uses AI coding assistants (Claude Code and Codex CLI) daily.
 
-Write as if the person is journaling for themselves — casual, specific, honest.
-Not a corporate report. Use first person ("我") when natural.
-Avoid phrases like "有效提升" "系統性排查" "形成可復用的知識庫" — nobody talks like that in a diary.
+Write as if journaling for yourself — casual, specific, honest. First person ("我").
+NOT a corporate report. NOT a task list. A diary entry you'd actually want to re-read.
 
 Given:
 1. Per-session summaries from today (between <summaries> tags)
-2. Tool usage statistics (between <stats> tags)
-
-Produce a daily thinking journal entry.
+2. Usage statistics (between <stats> tags) — includes per-project duration and which AI tool was used
 
 <rules>
 - Write in the SAME LANGUAGE as the dominant language in the summaries
-- Each bullet: one sentence max, concrete and specific
-- Extract REAL decisions and todos - never invent
-- If a section has nothing: write "無"
-- Do NOT output YAML frontmatter or the date title - those are handled separately
-- `available_skills` and `available_plugins` are environment inventory only.
-  They do NOT mean those skills/plugins were used today.
+- Total body: under 800 Chinese characters (or equivalent). Be concise.
+- Extract REAL decisions and insights — never invent
+- If there's genuinely nothing to write: output "今天沒有使用 AI 工具"
+- Do NOT output YAML frontmatter or the date title — those are handled separately
+- `available_skills` and `available_plugins` are environment inventory only — they do NOT mean those skills/plugins were used today
+- Focus on what the USER was thinking about and deciding, not just what the AI did
 </rules>
 
-<section_guide>
-## 今日主題
-1-2 sentences. What occupied most of the day? Write like telling a friend.
+<format>
+Output exactly this structure:
 
-## 關鍵決策
-Each bullet: what was decided + WHY (the tradeoff, the constraint, the trigger).
-BAD: "決定使用本地 Ollama 模型替代 Anthropic 雲端 API 來生成每日思考摘要"
-GOOD: "改用本地 Ollama 跑摘要，主要是 Claude API 一天跑一次太貴了，而且離線也能用"
+**今天** — 2-3 sentences: what occupied the day, the most important decision, one thing learned.
 
-## 待辦事項
-Concrete, actionable items that can go straight into a todo list. Include file names or specific steps.
-BAD: "繼續開發並完善每日思考摘要的第二階段總結引擎，支持批量歷史數據提取與多數據源整合"
-GOOD: "把 02_session_summarize.py 的 prompt 改成中文優先" "測試 launchd plist 能不能在睡眠狀態喚醒"
+**工具用量** — One line summarizing the stats: how many Claude Code sessions vs Codex sessions, total messages, total tools called. Example: "Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs"
 
-## 思考亮點
-Real insights: why something was decided, what was surprising, what was learned.
-Capture the REASONING, not the action.
-BAD: "透過分階段設計與嚴謹的數據過濾策略，有效降低每日摘要的資料噪音"
-GOOD: "發現 Codex 每次開 session 都把整份 AGENTS.md 塞進去，過濾掉之後資料量直接少了 81%%"
+### 项目时间线
 
-## 工具使用觀察
-Note patterns in HOW different tools were used (exploration vs execution,
-which tool for which type of thinking), NOT just list what tools were called.
+For each meaningful project (skip trivial one-off queries), write a short paragraph:
+- Start with the project name and which tool was used: "(via Claude Code)" or "(via Codex)" — ALWAYS include this label
+- Include the time spent if available: "约 2 小时"
+- 1-3 sentences: what was done, why, what happened. Write like telling a friend, not a status report.
+- Merge multiple sessions of the same project into one entry
+- Order by time spent (most time first)
 
-## 原始對話索引
-Re-organize session summaries by project, merge sessions that belong to the same project,
-keep 2-4 bullets each. Stay casual and specific.
-</section_guide>
+### 待办 + 想法
+
+- Max 5 items total
+- Only genuinely actionable todos or real insights worth remembering
+- One sentence each, concrete (include file names or specific steps)
+- If nothing worth noting: write "无"
+</format>
+
+<example>
+**今天** 主力在搞日记自动化 pipeline，从提取到生成跑通了全流程。顺便把 VIBE Dashboard 46 个乱 commit squash 成 5 个。学到：prompt 没写清楚语气，输出就变公文。
+
+**工具用量** Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs · 总计约 28h
+
+### 项目时间线
+
+**日记自动化** (via Claude Code · 约 4h)
+从零写了 extraction 脚本，发现用 JSONL 的 cwd 字段比文件名解码准确。消息筛选只保留用户输入 + 助手最后一段，token 从 33K 砍到 6K。launchd 定时任务配好了，半夜自动跑。
+
+**VIBE Dashboard** (via Codex · 约 3h)
+健康检查改成 SWR 轮询重试。launcher 从 bash 改成 AppleScript applet 才解决启动失败。最大工程是 squash 46 个 commit。
+
+**thermal-printer** (via Claude Code · 约 40min)
+加了 Bottle Neck Wall tab，修了打印后跳页 bug。
+
+### 待办 + 想法
+
+- `02_session_summarize.py` 的 prompt 还没改成中文优先
+- Codex 版本太旧不支持 `--enable hooks`，得升级
+- launchd 跑 .env 的 OPENAI_API_KEY 要确认能正常读取
+</example>
 
 <stats>
 %s
@@ -162,59 +177,73 @@ keep 2-4 bullets each. Stay casual and specific.
 
 
 def build_prompt_signal(signal_data: str, stats: Dict[str, Any]) -> str:
-    return """You are writing a personal thinking journal for a solo entrepreneur who builds
-e-commerce businesses and AI automation tools.
+    return """You are writing a personal thinking journal for a solo developer/entrepreneur
+who uses AI coding assistants (Claude Code and Codex CLI) daily.
 
-Write as if the person is journaling for themselves — casual, specific, honest.
-Not a corporate report. Use first person ("我") when natural.
-Avoid phrases like "有效提升" "系統性排查" "形成可復用的知識庫" — nobody talks like that in a diary.
+Write as if journaling for yourself — casual, specific, honest. First person ("我").
+NOT a corporate report. NOT a task list. A diary entry you'd actually want to re-read.
 
 Given:
 1. Signal data from today's AI conversations (between <signal> tags) — grouped by project, each session has a Recap (what the AI did) and the user's last Prompt
-2. Tool usage statistics (between <stats> tags)
-
-Produce a daily thinking journal entry.
+2. Usage statistics (between <stats> tags) — includes per-project duration and which AI tool was used
 
 <rules>
 - Write in the SAME LANGUAGE as the dominant language in the signal data
-- Each bullet: one sentence max, concrete and specific
-- Extract REAL decisions and todos — never invent
-- If a section has nothing: write "無"
+- Total body: under 800 Chinese characters (or equivalent). Be concise.
+- Extract REAL decisions and insights — never invent
+- If there's genuinely nothing to write: output "今天沒有使用 AI 工具"
 - Do NOT output YAML frontmatter or the date title — those are handled separately
-- `available_skills` and `available_plugins` are environment inventory only.
-  They do NOT mean those skills/plugins were used today.
+- `available_skills` and `available_plugins` are environment inventory only — they do NOT mean those skills/plugins were used today
 - Focus on what the USER was thinking about and deciding, not just what the AI did
 - The Recap tells you what happened; the Prompt tells you what the user cared about
 </rules>
 
-<section_guide>
-## 今日主題
-1-2 sentences. What occupied most of the day? Write like telling a friend.
+<format>
+Output exactly this structure:
 
-## 關鍵決策
-Each bullet: what was decided + WHY (the tradeoff, the constraint, the trigger).
-BAD: "決定使用本地 Ollama 模型替代 Anthropic 雲端 API 來生成每日思考摘要"
-GOOD: "改用本地 Ollama 跑摘要，主要是 Claude API 一天跑一次太貴了，而且離線也能用"
+**今天** — 2-3 sentences: what occupied the day, the most important decision, one thing learned.
 
-## 待辦事項
-Concrete, actionable items that can go straight into a todo list. Include file names or specific steps.
-BAD: "繼續開發並完善每日思考摘要的第二階段總結引擎，支持批量歷史數據提取與多數據源整合"
-GOOD: "把 02_session_summarize.py 的 prompt 改成中文優先" "測試 launchd plist 能不能在睡眠狀態喚醒"
+**工具用量** — One line summarizing the stats: how many Claude Code sessions vs Codex sessions, total messages, total tools called. Example: "Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs"
 
-## 思考亮點
-Real insights: why something was decided, what was surprising, what was learned.
-Capture the REASONING, not the action.
-BAD: "透過分階段設計與嚴謹的數據過濾策略，有效降低每日摘要的資料噪音"
-GOOD: "發現 Codex 每次開 session 都把整份 AGENTS.md 塞進去，過濾掉之後資料量直接少了 81%%"
+### 项目时间线
 
-## 工具使用觀察
-Note patterns in HOW different tools were used (exploration vs execution,
-which tool for which type of thinking), NOT just list what tools were called.
+For each meaningful project (skip trivial one-off queries), write a short paragraph:
+- Start with the project name and which tool was used: "(via Claude Code)" or "(via Codex)" — ALWAYS include this label
+- Include the time spent if available: "约 2 小时"
+- 1-3 sentences: what was done, why, what happened. Write like telling a friend, not a status report.
+- Merge multiple sessions of the same project into one entry
+- Order by time spent (most time first)
 
-## 原始對話索引
-Re-organize signal data by project, merge sessions that belong to the same project,
-keep 2-4 bullets each. Stay casual and specific.
-</section_guide>
+### 待办 + 想法
+
+- Max 5 items total
+- Only genuinely actionable todos or real insights worth remembering
+- One sentence each, concrete (include file names or specific steps)
+- If nothing worth noting: write "无"
+</format>
+
+<example>
+**今天** 主力在搞日记自动化 pipeline，从提取到生成跑通了全流程。顺便把 VIBE Dashboard 46 个乱 commit squash 成 5 个。学到：prompt 没写清楚语气，输出就变公文。
+
+**工具用量** Claude Code 113 sessions / 301 msgs · Codex 10 sessions / 112 msgs · 总计约 28h
+
+### 项目时间线
+
+**日记自动化** (via Claude Code · 约 4h)
+从零写了 extraction 脚本，发现用 JSONL 的 cwd 字段比文件名解码准确。消息筛选只保留用户输入 + 助手最后一段，token 从 33K 砍到 6K。launchd 定时任务配好了，半夜自动跑。
+
+**VIBE Dashboard** (via Codex · 约 3h)
+健康检查改成 SWR 轮询重试。launcher 从 bash 改成 AppleScript applet 才解决启动失败。最大工程是 squash 46 个 commit。
+
+**thermal-printer** (via Claude Code · 约 40min)
+加了 Bottle Neck Wall tab，修了打印后跳页 bug。
+
+### 待办 + 想法
+
+- `02_session_summarize.py` 的 prompt 还没改成中文优先
+- Codex 版本太旧不支持 `--enable hooks`，得升级
+- launchd 跑 .env 的 OPENAI_API_KEY 要确认能正常读取
+</example>
 
 <stats>
 %s
