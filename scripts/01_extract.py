@@ -496,9 +496,22 @@ def build_stats(date_str: str, sessions: List[SessionData]) -> Dict[str, Any]:
             stats["tools_used"][source]["available_skills"] = sorted(available_skills)
             stats["tools_used"][source]["available_plugins"] = sorted(available_plugins)
 
+    # Per-project duration: sum (max_ts - min_ts) across all sessions
+    project_duration: Dict[Tuple[str, str], float] = defaultdict(float)
+    for session in sessions:
+        timestamps = [parse_timestamp(m.timestamp) for m in session.messages]
+        timestamps = [t for t in timestamps if t is not None]
+        if timestamps:
+            dur = (max(timestamps) - min(timestamps)).total_seconds() / 60
+            project_duration[(session.project_name, session.source)] += dur
+
     projects = []
     for (name, source), session_ids in sorted(project_sessions.items()):
-        projects.append({"name": name, "source": source, "sessions": len(session_ids)})
+        entry: Dict[str, Any] = {"name": name, "source": source, "sessions": len(session_ids)}
+        dur = project_duration.get((name, source), 0)
+        if dur > 0:
+            entry["duration_min"] = round(dur)
+        projects.append(entry)
     stats["projects_touched"] = projects
     return stats
 
