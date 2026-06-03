@@ -70,3 +70,21 @@ PREVIOUS_MONTH="$(date -v-1d +%Y-%m 2>/dev/null || date -d yesterday +%Y-%m)"
   echo "=== Pipeline finished: $(date) ==="
 
 } > "$LOG_FILE" 2>&1
+
+# --- Failure alert: notify via Lark if the daily journal was not generated ---
+# Optional. Set LARK_ALERT_USER_ID in .env to receive a Lark DM when the nightly
+# run fails to produce a journal. Unset = silently skip (failure still logged).
+JOURNAL_FILE="$PROJECT_DIR/ai-journal/daily/$YESTERDAY.md"
+if [ ! -f "$JOURNAL_FILE" ] || [ ! -s "$JOURNAL_FILE" ]; then
+  ERROR_HINT=$(grep -E "ERROR|Traceback|FAILED|RemoteDisconnected|TimeoutError" "$LOG_FILE" | tail -5)
+  ALERT_BODY="**Daily Thinking Summary — Pipeline Failed**\n\nDate: $YESTERDAY\nJournal not generated.\n\n\`\`\`\n${ERROR_HINT}\n\`\`\`\n\nCheck log: \`$LOG_FILE\`"
+
+  if [ -n "${LARK_ALERT_USER_ID:-}" ] && command -v lark-cli &>/dev/null; then
+    LARK_CLI_NO_PROXY=1 lark-cli im +messages-send \
+      --user-id "$LARK_ALERT_USER_ID" \
+      --as bot \
+      --markdown "$ALERT_BODY" 2>&1 || echo "WARNING: Lark failure alert send failed" >> "$LOG_FILE"
+  else
+    echo "WARNING: pipeline failed; set LARK_ALERT_USER_ID in .env to enable Lark alerts" >> "$LOG_FILE"
+  fi
+fi

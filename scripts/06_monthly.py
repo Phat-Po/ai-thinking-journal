@@ -8,6 +8,7 @@ ai-journal/monthly/YYYY-MM.md via LLM.
 
 from __future__ import annotations
 
+import encodings.idna  # noqa: F401  preload codec; fixes launchd "unknown encoding: idna"
 import argparse
 import json
 import os

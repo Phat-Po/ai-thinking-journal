@@ -9,11 +9,15 @@ ai-journal/daily/YYYY-MM-DD.md.
 
 from __future__ import annotations
 
+import encodings.idna  # noqa: F401  preload codec; fixes launchd "unknown encoding: idna"
 import argparse
+import http.client
 import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -272,7 +276,7 @@ def call_ollama(prompt: str, model: str) -> str:
     return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
 
-def call_openai(prompt: str, model: str) -> str:
+def call_openai(prompt: str, model: str, max_retries: int = 3) -> str:
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         print("Error: OPENAI_API_KEY not set.", file=sys.stderr)
@@ -282,14 +286,28 @@ def call_openai(prompt: str, model: str) -> str:
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
     }).encode("utf-8")
-    req = urllib.request.Request(
-        OPENAI_URL, data=payload,
-        headers={"Content-Type": "application/json", "Authorization": "Bearer " + api_key},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=240) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return data["choices"][0]["message"]["content"].strip()
+
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        req = urllib.request.Request(
+            OPENAI_URL, data=payload,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=240) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+        except (http.client.RemoteDisconnected, TimeoutError, urllib.error.URLError, OSError) as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                delay = 5 * (3 ** (attempt - 1))  # 5s, 15s, 45s
+                print("WARNING: OpenAI attempt %d/%d failed (%s: %s), retrying in %ds..."
+                      % (attempt, max_retries, type(exc).__name__, exc, delay), file=sys.stderr)
+                time.sleep(delay)
+            else:
+                print("ERROR: OpenAI all %d attempts failed. Last error: %s" % (max_retries, exc), file=sys.stderr)
+    raise last_exc
 
 
 def call_llm(prompt: str, model: str, backend: str) -> str:

@@ -30,6 +30,54 @@ Automated nightly pipeline that extracts AI conversation transcripts from Claude
 - Avoid internal-only labels, task IDs, or shorthand that outside viewers cannot understand. Translate them into plain visual concepts.
 - Keep cover text minimal: one main title, one short hook, and only a few tiny labels where they improve comprehension.
 
+## Dual-Repo Architecture
+
+This project exists as **two independent repositories** with no common ancestor.
+They share the same purpose but serve different audiences. **Never `git merge` them.**
+
+| | Source Repo (this one) | Deploy Repo |
+|---|---|---|
+| Path | `20_PROJECTS_MAINTAIN/20260514__automation__daily-thinking-summary` | `~/daily-thinking-summary` |
+| Purpose | Public OSS release (GitHub) | Operator's production nightly run |
+| Audience | External users / contributors | Operator only |
+| GitHub | Has remote | No remote |
+
+### Mental Model
+
+- **Deploy repo = 真身** — the runtime-hardened version that produces your real daily journals.
+- **Source repo = 发行版** — the public-facing OSS release that others clone.
+
+### Fix Flow (one-way)
+
+1. Runtime bug fixes (idna crash, API retry, failure alert, date-leak) are **developed and verified in the deploy repo first**.
+2. Once verified, they are **cherry-picked / manually ported to the source repo** for the next OSS release.
+3. Never port from source → deploy for runtime fixes.
+
+### Feature Flow (one-way, opposite)
+
+1. Format/UX features (v2 short format, wizard, new templates) are **developed in the source repo**.
+2. When the operator decides to adopt them, they are ported **source → deploy**.
+3. That decision is separate from any runtime fix cycle.
+
+### Hard Rules
+
+- **Do NOT `git merge`** the two repos — no common ancestor, will produce conflicts.
+- **Do NOT overwrite deploy with source** unless the operator explicitly wants to switch to v2 format. If doing so, runtime fixes must be re-verified and re-applied.
+- **Do NOT hardcode personal identifiers** (Lark user IDs, webhook URLs, etc.) in the source repo. Use env vars with graceful fallback.
+- **Do NOT `git push` the source repo** without operator confirmation (even for small fixes).
+
+### Runtime Hardening in This Repo
+
+As of 2026-06-04, the source repo includes these protections ported from the deploy repo:
+
+| Protection | Where | Env var |
+|---|---|---|
+| idna codec preload | 5 scripts (`02`–`07`) | — (always on) |
+| API retry with backoff | `03_summarize.py` (`call_openai`) | — (always on, 3 retries) |
+| Failure alert | `run_pipeline.sh` | `LARK_ALERT_USER_ID` (optional; unset = log-only) |
+
+If you add new runtime protections, follow the same pattern: verify in deploy → port to source.
+
 ## Task Sequence
 
 1. Extraction POC — Python script to scan and extract today's conversations
