@@ -1,6 +1,6 @@
 [project]
 name = "ai-thinking-journal"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automated daily thinking journal from AI coding assistant conversations"
 readme = "README.md"
 license = "MIT"
